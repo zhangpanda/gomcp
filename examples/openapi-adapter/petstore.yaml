@@ -1,0 +1,37 @@
+openapi: "3.0.0"
+info:
+  title: Pet Store
+  version: "1.0.0"
+servers:
+  - url: https://petstore.example.com
+paths:
+  /pets:
+    get:
+      operationId: listPets
+      summary: List all pets
+      tags: [pets]
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          description: Max number of pets to return
+          schema:
+            type: integer
+  /pets/{petId}:
+    get:
+      operationId: getPet
+      summary: Get a pet by ID
+      tags: [pets]
+      parameters:
+        - name: petId
+          in: path
+          required: true
+          description: The pet ID
+          schema:
+            type: string
+  /users:
+    get:
+      operationId: listUsers
+      summary: List all users
+      tags: [users]
+      parameters: []
