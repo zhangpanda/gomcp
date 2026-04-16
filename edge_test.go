@@ -2,7 +2,7 @@ package gomcp_test
 
 import (
 	"context"
-	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -192,7 +192,7 @@ func TestEdge_TasksCancelWithoutAsyncTool(t *testing.T) {
 func TestEdge_ResourceHandlerError(t *testing.T) {
 	s := gomcp.New("test", "1.0")
 	s.Resource("err://x", "X", func(ctx *gomcp.Context) (any, error) {
-		return nil, json.Unmarshal([]byte("bad"), nil) // some error
+		return nil, fmt.Errorf("resource error")
 	})
 	resp := s.HandleRaw(context.Background(), []byte(`{"jsonrpc":"2.0","id":1,"method":"resources/read","params":{"uri":"err://x"}}`))
 	if !strings.Contains(string(resp), "error") {
@@ -205,7 +205,7 @@ func TestEdge_ResourceHandlerError(t *testing.T) {
 func TestEdge_PromptHandlerError(t *testing.T) {
 	s := gomcp.New("test", "1.0")
 	s.Prompt("bad", "bad", nil, func(ctx *gomcp.Context) ([]gomcp.PromptMessage, error) {
-		return nil, json.Unmarshal([]byte("bad"), nil)
+		return nil, fmt.Errorf("prompt error")
 	})
 	resp := s.HandleRaw(context.Background(), []byte(`{"jsonrpc":"2.0","id":1,"method":"prompts/get","params":{"name":"bad"}}`))
 	if !strings.Contains(string(resp), "error") {
