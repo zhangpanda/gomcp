@@ -297,13 +297,13 @@ func (s *Server) handleToolsCall(ctx context.Context, msg *jsonrpcMessage) *json
 		return handlerErr
 	})
 
-	// check if panic was recovered
+	// panic recovered → friendly error result (check before err since Recovery also returns error)
 	if panicMsg, ok := c.Get("_panic"); ok {
 		return newResponse(msg.ID, ErrorResult(panicMsg.(string)))
 	}
 
 	if err != nil {
-		return newErrorResponse(msg.ID, -32603, err.Error())
+		return newResponse(msg.ID, ErrorResult(err.Error()))
 	}
 	return newResponse(msg.ID, result)
 }

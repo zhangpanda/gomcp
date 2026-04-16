@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"sync"
 )
 
 // Context carries request-scoped data through the handler chain.
@@ -12,6 +13,7 @@ type Context struct {
 	ctx    context.Context
 	args   map[string]any
 	logger *slog.Logger
+	mu     sync.RWMutex
 	store  map[string]any
 }
 
@@ -29,10 +31,19 @@ func (c *Context) Context() context.Context { return c.ctx }
 func (c *Context) Logger() *slog.Logger { return c.logger }
 
 // Set stores a key-value pair in the context.
-func (c *Context) Set(key string, val any) { c.store[key] = val }
+func (c *Context) Set(key string, val any) {
+	c.mu.Lock()
+	c.store[key] = val
+	c.mu.Unlock()
+}
 
 // Get retrieves a value from the context store.
-func (c *Context) Get(key string) (any, bool) { v, ok := c.store[key]; return v, ok }
+func (c *Context) Get(key string) (any, bool) {
+	c.mu.RLock()
+	v, ok := c.store[key]
+	c.mu.RUnlock()
+	return v, ok
+}
 
 // Args returns the raw arguments map.
 func (c *Context) Args() map[string]any { return c.args }

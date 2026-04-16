@@ -107,9 +107,12 @@ func (tm *taskManager) cancel(id string) bool {
 func (s *Server) AsyncTool(name, description string, handler HandlerFunc, opts ...ToolOption) {
 	s.ensureTaskManager()
 	wrapper := func(ctx *Context) (*CallToolResult, error) {
+		// capture args and logger for the async goroutine
+		args := ctx.Args()
+		logger := ctx.Logger()
 		id := s.taskMgr.submit(name, ctx.Context(), func(taskCtx context.Context) (*CallToolResult, error) {
-			ctx.ctx = taskCtx
-			return handler(ctx)
+			asyncCtx := newContext(taskCtx, args, logger)
+			return handler(asyncCtx)
 		})
 		return TextResult(fmt.Sprintf(`{"taskId":"%s"}`, id)), nil
 	}
@@ -133,9 +136,11 @@ func (s *Server) AsyncToolFunc(name, description string, fn any, opts ...ToolOpt
 		if baseName == name {
 			original := entry.handler
 			entry.handler = func(ctx *Context) (*CallToolResult, error) {
+				args := ctx.Args()
+				logger := ctx.Logger()
 				id := s.taskMgr.submit(name, ctx.Context(), func(taskCtx context.Context) (*CallToolResult, error) {
-					ctx.ctx = taskCtx
-					return original(ctx)
+					asyncCtx := newContext(taskCtx, args, logger)
+					return original(asyncCtx)
 				})
 				return TextResult(fmt.Sprintf(`{"taskId":"%s"}`, id)), nil
 			}
