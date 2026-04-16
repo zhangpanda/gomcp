@@ -9,6 +9,11 @@ import (
 	"time"
 )
 
+type transportCtxKey = CtxKey
+
+// CtxKey is the context key type used by transport to inject HTTP metadata.
+type CtxKey string
+
 // HTTPServer serves MCP over Streamable HTTP (POST for requests, GET for SSE notifications).
 type HTTPServer struct {
 	handler MessageHandler
@@ -103,11 +108,22 @@ func (s *HTTPServer) handlePost(w http.ResponseWriter, r *http.Request) {
 	}
 	defer r.Body.Close()
 
+	// inject HTTP headers into context for auth middleware
+	ctx := r.Context()
+	if auth := r.Header.Get("Authorization"); auth != "" {
+		ctx = context.WithValue(ctx, transportCtxKey("auth_header"), auth)
+	}
+	headers := make(map[string]string)
+	for k := range r.Header {
+		headers[k] = r.Header.Get(k)
+	}
+	ctx = context.WithValue(ctx, transportCtxKey("http_headers"), headers)
+
 	msgs, isBatch := ParseBatch(body)
 
 	responses := make([]json.RawMessage, 0, len(msgs))
 	for _, msg := range msgs {
-		resp := s.handler(r.Context(), msg)
+		resp := s.handler(ctx, msg)
 		if resp != nil {
 			responses = append(responses, resp)
 		}
