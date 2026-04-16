@@ -187,13 +187,16 @@ Add to `claude_desktop_config.json`:
 - [x] Middleware system (Logger, Recovery, RateLimit, Timeout, RequestID)
 - [x] Tool groups with prefix naming
 - [x] stdio + Streamable HTTP transports
-- [ ] Gin adapter — import existing Gin routes as MCP tools
-- [ ] OpenAPI adapter — generate tools from Swagger/OpenAPI docs
+- [x] Gin adapter — import existing Gin routes as MCP tools
+- [x] OpenAPI adapter — generate tools from Swagger/OpenAPI docs
+- [x] OpenTelemetry integration
+- [x] mcptest package
 - [ ] gRPC adapter
-- [ ] OpenTelemetry integration
 - [ ] Component versioning
+- [ ] Async tasks (Task-augmented Tools)
 - [ ] MCP Inspector (web debug UI)
-- [ ] mcptest package
+- [ ] Auth middleware (Bearer / API Key / OAuth)
+- [ ] Hot-reload provider
 
 ## License
 
