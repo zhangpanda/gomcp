@@ -19,6 +19,7 @@ const (
 )
 
 type task struct {
+	mu        sync.Mutex
 	ID        string          `json:"id"`
 	Tool      string          `json:"tool"`
 	Status    string          `json:"status"`
@@ -52,11 +53,16 @@ func (tm *taskManager) submit(toolName string, ctx context.Context, handler func
 		case tm.sem <- struct{}{}:
 			defer func() { <-tm.sem }()
 		case <-taskCtx.Done():
+			t.mu.Lock()
 			t.Status = TaskCancelled
+			t.mu.Unlock()
 			return
 		}
 
 		result, err := handler(taskCtx)
+
+		t.mu.Lock()
+		defer t.mu.Unlock()
 		if taskCtx.Err() != nil {
 			t.Status = TaskCancelled
 			return
@@ -86,6 +92,8 @@ func (tm *taskManager) cancel(id string) bool {
 	if !ok {
 		return false
 	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
 	if t.Status == TaskRunning {
 		t.cancel()
 		t.Status = TaskCancelled
@@ -176,7 +184,10 @@ func (s *Server) handleTasksGet(msg *jsonrpcMessage) *jsonrpcMessage {
 	if !ok {
 		return newErrorResponse(msg.ID, -32001, "task not found: "+params.TaskID)
 	}
-	return newResponse(msg.ID, taskResult{ID: t.ID, Status: t.Status, Result: t.Result, Error: t.Error})
+	t.mu.Lock()
+	tr := taskResult{ID: t.ID, Status: t.Status, Result: t.Result, Error: t.Error}
+	t.mu.Unlock()
+	return newResponse(msg.ID, tr)
 }
 
 func (s *Server) handleTasksCancel(msg *jsonrpcMessage) *jsonrpcMessage {
