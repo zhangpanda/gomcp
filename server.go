@@ -36,6 +36,7 @@ type Server struct {
 	mu                sync.RWMutex
 	notifyFn          func(method string, params any) // set by HTTP transport
 	taskMgr           *taskManager
+	completions       []completionEntry
 }
 
 // Option configures the Server.
@@ -222,6 +223,8 @@ func (s *Server) handleRequestInternal(ctx context.Context, msg *jsonrpcMessage)
 		return s.handleTasksGet(msg)
 	case "tasks/cancel":
 		return s.handleTasksCancel(msg)
+	case "completion/complete":
+		return s.handleComplete(msg)
 	default:
 		return newErrorResponse(msg.ID, -32601, "method not found: "+msg.Method)
 	}

@@ -227,3 +227,44 @@ func callMethod(t *testing.T, s *gomcp.Server, method string, params map[string]
 	req, _ := json.Marshal(map[string]any{"jsonrpc": "2.0", "id": 1, "method": method, "params": json.RawMessage(paramsJSON)})
 	return s.HandleRaw(context.Background(), req)
 }
+
+// --- Completion tests ---
+
+func TestCompletion_PromptArg(t *testing.T) {
+	s := gomcp.New("test", "1.0")
+	s.Prompt("review", "Review", []gomcp.PromptArgument{gomcp.PromptArg("lang", "Language", true)}, nil)
+	s.Completion("prompt", "review", "lang", func(partial string) []string {
+		all := []string{"go", "python", "typescript", "rust"}
+		var out []string
+		for _, v := range all {
+			if len(partial) == 0 || strings.HasPrefix(v, partial) {
+				out = append(out, v)
+			}
+		}
+		return out
+	})
+
+	// partial "py" → ["python"]
+	resp := callMethod(t, s, "completion/complete", map[string]any{
+		"ref":      map[string]any{"type": "ref/prompt", "name": "review"},
+		"argument": map[string]any{"name": "lang", "value": "py"},
+	})
+	if !strings.Contains(string(resp), "python") {
+		t.Errorf("expected python, got: %s", string(resp))
+	}
+	if strings.Contains(string(resp), "go") {
+		t.Errorf("should not contain go: %s", string(resp))
+	}
+}
+
+func TestCompletion_Empty(t *testing.T) {
+	s := gomcp.New("test", "1.0")
+	// no completions registered
+	resp := callMethod(t, s, "completion/complete", map[string]any{
+		"ref":      map[string]any{"type": "ref/prompt", "name": "x"},
+		"argument": map[string]any{"name": "y", "value": ""},
+	})
+	if !strings.Contains(string(resp), `"values":[]`) {
+		t.Errorf("expected empty values, got: %s", string(resp))
+	}
+}
