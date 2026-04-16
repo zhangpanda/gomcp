@@ -296,20 +296,32 @@ func (s *Server) handleToolsCall(ctx context.Context, msg *jsonrpcMessage) *json
 	c.Set("_tool_name", params.Name)
 
 	var result *CallToolResult
-	var handlerErr error
 
-	err := executeChain(c, mws, func() error {
-		result, handlerErr = entry.handler(c)
-		return handlerErr
-	})
+	// safety net: recover panics even without Recovery middleware
+	func() {
+		defer func() {
+			if r := recover(); r != nil {
+				s.logger.Error("unrecovered panic in tool handler", "tool", params.Name, "panic", fmt.Sprintf("%v", r))
+				c.Set("_panic", fmt.Sprintf("internal error: %v", r))
+			}
+		}()
+		err := executeChain(c, mws, func() error {
+			var handlerErr error
+			result, handlerErr = entry.handler(c)
+			return handlerErr
+		})
+		if err != nil {
+			c.Set("_chain_error", err.Error())
+		}
+	}()
 
-	// panic recovered → friendly error result (check before err since Recovery also returns error)
+	// panic recovered → friendly error result
 	if panicMsg, ok := c.Get("_panic"); ok {
 		return newResponse(msg.ID, ErrorResult(panicMsg.(string)))
 	}
 
-	if err != nil {
-		return newResponse(msg.ID, ErrorResult(err.Error()))
+	if errMsg, ok := c.Get("_chain_error"); ok {
+		return newResponse(msg.ID, ErrorResult(errMsg.(string)))
 	}
 	return newResponse(msg.ID, result)
 }
