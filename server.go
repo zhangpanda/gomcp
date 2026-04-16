@@ -35,6 +35,7 @@ type Server struct {
 	logger            *slog.Logger
 	mu                sync.RWMutex
 	notifyFn          func(method string, params any) // set by HTTP transport
+	taskMgr           *taskManager
 }
 
 // Option configures the Server.
@@ -65,10 +66,47 @@ func (s *Server) notify(method string) {
 	}
 }
 
-// Tool registers a tool with a simple HandlerFunc.
-func (s *Server) Tool(name, description string, handler HandlerFunc) {
+// ToolOption configures a tool registration.
+type ToolOption func(*toolEntry)
+
+// Version sets the version for a tool. Versioned tools are registered as "name@version".
+func Version(v string) ToolOption {
+	return func(e *toolEntry) {
+		if e.info.Annotations == nil {
+			e.info.Annotations = make(map[string]string)
+		}
+		e.info.Annotations["version"] = v
+	}
+}
+
+// Deprecated marks a tool as deprecated.
+func Deprecated(msg string) ToolOption {
+	return func(e *toolEntry) {
+		if e.info.Annotations == nil {
+			e.info.Annotations = make(map[string]string)
+		}
+		e.info.Annotations["deprecated"] = msg
+	}
+}
+
+func (s *Server) registerTool(name string, entry toolEntry, opts []ToolOption) {
+	for _, o := range opts {
+		o(&entry)
+	}
+	key := name
+	if v, ok := entry.info.Annotations["version"]; ok && v != "" {
+		key = name + "@" + v
+		entry.info.Name = key
+	}
 	s.mu.Lock()
-	s.tools[name] = toolEntry{
+	s.tools[key] = entry
+	s.mu.Unlock()
+	s.notify("notifications/tools/list_changed")
+}
+
+// Tool registers a tool with a simple HandlerFunc.
+func (s *Server) Tool(name, description string, handler HandlerFunc, opts ...ToolOption) {
+	entry := toolEntry{
 		info: ToolInfo{
 			Name:        name,
 			Description: description,
@@ -76,24 +114,21 @@ func (s *Server) Tool(name, description string, handler HandlerFunc) {
 		},
 		handler: handler,
 	}
-	s.mu.Unlock()
-	s.notify("notifications/tools/list_changed")
+	s.registerTool(name, entry, opts)
 }
 
 // RegisterToolRaw registers a tool with a pre-built schema (used by adapters).
-func (s *Server) RegisterToolRaw(name, description string, inputSchema JSONSchema, handler HandlerFunc) {
-	s.mu.Lock()
-	s.tools[name] = toolEntry{
+func (s *Server) RegisterToolRaw(name, description string, inputSchema JSONSchema, handler HandlerFunc, opts ...ToolOption) {
+	entry := toolEntry{
 		info:    ToolInfo{Name: name, Description: description, InputSchema: inputSchema},
 		handler: handler,
 	}
-	s.mu.Unlock()
-	s.notify("notifications/tools/list_changed")
+	s.registerTool(name, entry, opts)
 }
 
 // ToolFunc registers a tool using a typed function.
 // Signature: func(*Context, InputStruct) (OutputType, error)
-func (s *Server) ToolFunc(name, description string, fn any) {
+func (s *Server) ToolFunc(name, description string, fn any, opts ...ToolOption) {
 	fv := reflect.ValueOf(fn)
 	ft := fv.Type()
 	if ft.Kind() != reflect.Func || ft.NumIn() != 2 || ft.NumOut() != 2 {
@@ -116,13 +151,32 @@ func (s *Server) ToolFunc(name, description string, fn any) {
 		return toResult(results[0].Interface()), nil
 	}
 
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.tools[name] = toolEntry{
+	entry := toolEntry{
 		info:      ToolInfo{Name: name, Description: description, InputSchema: inputSchema},
 		handler:   handler,
 		schemaRes: &schemaRes,
 	}
+	s.registerTool(name, entry, opts)
+}
+
+// resolveToolVersion finds the latest versioned tool matching a base name.
+// Must be called with s.mu.RLock held.
+func (s *Server) resolveToolVersion(name string) (toolEntry, bool) {
+	prefix := name + "@"
+	var best toolEntry
+	var bestVersion string
+	found := false
+	for key, entry := range s.tools {
+		if len(key) > len(prefix) && key[:len(prefix)] == prefix {
+			v := key[len(prefix):]
+			if !found || v > bestVersion {
+				best = entry
+				bestVersion = v
+				found = true
+			}
+		}
+	}
+	return best, found
 }
 
 func toResult(v any) *CallToolResult {
@@ -164,6 +218,10 @@ func (s *Server) handleRequestInternal(ctx context.Context, msg *jsonrpcMessage)
 		return s.handlePromptsList(msg)
 	case "prompts/get":
 		return s.handlePromptsGet(msg)
+	case "tasks/get":
+		return s.handleTasksGet(msg)
+	case "tasks/cancel":
+		return s.handleTasksCancel(msg)
 	default:
 		return newErrorResponse(msg.ID, -32601, "method not found: "+msg.Method)
 	}
@@ -209,6 +267,10 @@ func (s *Server) handleToolsCall(ctx context.Context, msg *jsonrpcMessage) *json
 
 	s.mu.RLock()
 	entry, ok := s.tools[params.Name]
+	if !ok {
+		// version fallback: "search" → try find "search" or latest "search@*"
+		entry, ok = s.resolveToolVersion(params.Name)
+	}
 	mws := make([]Middleware, len(s.middlewares))
 	copy(mws, s.middlewares)
 	s.mu.RUnlock()

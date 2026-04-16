@@ -61,9 +61,10 @@ type PromptCapability struct {
 }
 
 type ToolInfo struct {
-	Name        string     `json:"name"`
-	Description string     `json:"description,omitempty"`
-	InputSchema JSONSchema `json:"inputSchema"`
+	Name        string            `json:"name"`
+	Description string            `json:"description,omitempty"`
+	InputSchema JSONSchema        `json:"inputSchema"`
+	Annotations map[string]string `json:"annotations,omitempty"`
 }
 
 type JSONSchema struct {

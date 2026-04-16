@@ -34,6 +34,9 @@ func (c *Context) Set(key string, val any) { c.store[key] = val }
 // Get retrieves a value from the context store.
 func (c *Context) Get(key string) (any, bool) { v, ok := c.store[key]; return v, ok }
 
+// Args returns the raw arguments map.
+func (c *Context) Args() map[string]any { return c.args }
+
 // Bind unmarshals the raw arguments into the given struct.
 func (c *Context) Bind(v any) error {
 	data, err := json.Marshal(c.args)

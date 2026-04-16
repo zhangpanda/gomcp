@@ -27,26 +27,30 @@ func (g *Group) Group(prefix string, mws ...Middleware) *Group {
 }
 
 // Tool registers a tool under this group. The tool name becomes "prefix.name".
-func (g *Group) Tool(name, description string, handler HandlerFunc) {
+func (g *Group) Tool(name, description string, handler HandlerFunc, opts ...ToolOption) {
 	fullName := g.prefix + "." + name
-	// wrap handler with group middleware
 	wrapped := g.wrapHandler(handler)
-	g.server.Tool(fullName, description, wrapped)
+	g.server.Tool(fullName, description, wrapped, opts...)
 }
 
 // ToolFunc registers a typed tool under this group.
-func (g *Group) ToolFunc(name, description string, fn any) {
-	// register via server first to get the schema-aware handler
+func (g *Group) ToolFunc(name, description string, fn any, opts ...ToolOption) {
 	fullName := g.prefix + "." + name
-	g.server.ToolFunc(fullName, description, fn)
+	g.server.ToolFunc(fullName, description, fn, opts...)
 
 	// now wrap the registered handler with group middleware
+	if len(g.middlewares) == 0 {
+		return
+	}
 	g.server.mu.Lock()
 	defer g.server.mu.Unlock()
-	if entry, ok := g.server.tools[fullName]; ok {
-		original := entry.handler
-		entry.handler = g.wrapHandlerFunc(original)
-		g.server.tools[fullName] = entry
+	// find the key (may have @version suffix)
+	for key, entry := range g.server.tools {
+		if key == fullName || (len(key) > len(fullName) && key[:len(fullName)+1] == fullName+"@") {
+			original := entry.handler
+			entry.handler = g.wrapHandlerFunc(original)
+			g.server.tools[key] = entry
+		}
 	}
 }
 
