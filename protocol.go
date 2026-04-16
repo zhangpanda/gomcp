@@ -30,36 +30,43 @@ func newErrorResponse(id json.RawMessage, code int, msg string) *jsonrpcMessage 
 
 // MCP protocol types
 
+// ServerInfo describes the MCP server name and version.
 type ServerInfo struct {
 	Name    string `json:"name"`
 	Version string `json:"version"`
 }
 
+// InitializeResult is the response to an initialize request.
 type InitializeResult struct {
 	ProtocolVersion string            `json:"protocolVersion"`
 	Capabilities    ServerCapabilities `json:"capabilities"`
 	ServerInfo      ServerInfo        `json:"serverInfo"`
 }
 
+// ServerCapabilities declares the server's supported features.
 type ServerCapabilities struct {
 	Tools     *ToolCapability     `json:"tools,omitempty"`
 	Resources *ResourceCapability `json:"resources,omitempty"`
 	Prompts   *PromptCapability   `json:"prompts,omitempty"`
 }
 
+// ToolCapability describes tool-related capabilities.
 type ToolCapability struct {
 	ListChanged bool `json:"listChanged,omitempty"`
 }
 
+// ResourceCapability describes resource-related capabilities.
 type ResourceCapability struct {
 	Subscribe   bool `json:"subscribe,omitempty"`
 	ListChanged bool `json:"listChanged,omitempty"`
 }
 
+// PromptCapability describes prompt-related capabilities.
 type PromptCapability struct {
 	ListChanged bool `json:"listChanged,omitempty"`
 }
 
+// ToolInfo describes a registered tool and its input schema.
 type ToolInfo struct {
 	Name        string            `json:"name"`
 	Description string            `json:"description,omitempty"`
@@ -67,6 +74,7 @@ type ToolInfo struct {
 	Annotations map[string]string `json:"annotations,omitempty"`
 }
 
+// JSONSchema represents a JSON Schema definition for tool parameters.
 type JSONSchema struct {
 	Type       string                `json:"type"`
 	Properties map[string]JSONSchema `json:"properties,omitempty"`
@@ -81,20 +89,24 @@ type JSONSchema struct {
 	Items       *JSONSchema `json:"items,omitempty"`
 }
 
+// ToolListResult is the response to tools/list.
 type ToolListResult struct {
 	Tools []ToolInfo `json:"tools"`
 }
 
+// CallToolParams is the request parameters for tools/call.
 type CallToolParams struct {
 	Name      string         `json:"name"`
 	Arguments map[string]any `json:"arguments,omitempty"`
 }
 
+// CallToolResult is the response from a tool invocation.
 type CallToolResult struct {
 	Content []ContentBlock `json:"content"`
 	IsError bool           `json:"isError,omitempty"`
 }
 
+// ContentBlock represents a single content item in a tool result.
 type ContentBlock struct {
 	Type     string `json:"type"`
 	Text     string `json:"text,omitempty"`
@@ -102,10 +114,12 @@ type ContentBlock struct {
 	MIMEType string `json:"mimeType,omitempty"`
 }
 
+// TextResult creates a successful text result.
 func TextResult(s string) *CallToolResult {
 	return &CallToolResult{Content: []ContentBlock{{Type: "text", Text: s}}}
 }
 
+// ErrorResult creates an error result with isError set to true.
 func ErrorResult(msg string) *CallToolResult {
 	return &CallToolResult{Content: []ContentBlock{{Type: "text", Text: msg}}, IsError: true}
 }

@@ -42,8 +42,11 @@ type Server struct {
 // Option configures the Server.
 type Option func(*Server)
 
+// WithDescription sets the server description.
 func WithDescription(desc string) Option { return func(s *Server) { s.desc = desc } }
-func WithLogger(l *slog.Logger) Option   { return func(s *Server) { s.logger = l } }
+
+// WithLogger sets a custom logger for the server.
+func WithLogger(l *slog.Logger) Option { return func(s *Server) { s.logger = l } }
 
 // New creates a new MCP Server.
 func New(name, version string, opts ...Option) *Server {

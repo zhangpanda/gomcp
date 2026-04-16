@@ -11,11 +11,13 @@ type ValidationError struct {
 	Fields []FieldError
 }
 
+// FieldError describes a validation failure for a single field.
 type FieldError struct {
 	Field   string
 	Message string
 }
 
+// Error returns a semicolon-separated list of field errors.
 func (e *ValidationError) Error() string {
 	msgs := make([]string, len(e.Fields))
 	for i, f := range e.Fields {

@@ -23,6 +23,7 @@ type resourceTemplateEntry struct {
 
 // MCP Resource types
 
+// ResourceInfo describes a static resource.
 type ResourceInfo struct {
 	URI         string `json:"uri"`
 	Name        string `json:"name"`
@@ -30,6 +31,7 @@ type ResourceInfo struct {
 	MIMEType    string `json:"mimeType,omitempty"`
 }
 
+// ResourceTemplateInfo describes a dynamic resource with a URI template.
 type ResourceTemplateInfo struct {
 	URITemplate string `json:"uriTemplate"`
 	Name        string `json:"name"`
@@ -37,24 +39,29 @@ type ResourceTemplateInfo struct {
 	MIMEType    string `json:"mimeType,omitempty"`
 }
 
+// ResourceContents holds the content returned by a resource read.
 type ResourceContents struct {
 	URI      string `json:"uri"`
 	MIMEType string `json:"mimeType,omitempty"`
 	Text     string `json:"text,omitempty"`
 }
 
+// ResourceListResult is the response to resources/list.
 type ResourceListResult struct {
 	Resources []ResourceInfo `json:"resources"`
 }
 
+// ResourceTemplateListResult is the response to resources/templates/list.
 type ResourceTemplateListResult struct {
 	ResourceTemplates []ResourceTemplateInfo `json:"resourceTemplates"`
 }
 
+// ReadResourceParams is the request parameters for resources/read.
 type ReadResourceParams struct {
 	URI string `json:"uri"`
 }
 
+// ReadResourceResult is the response to resources/read.
 type ReadResourceResult struct {
 	Contents []ResourceContents `json:"contents"`
 }
@@ -99,18 +106,22 @@ func (s *Server) ResourceTemplate(uriTemplate, name string, handler ResourceHand
 
 // Resource option helpers
 
+// WithResourceDescription sets the description for a resource.
 func WithResourceDescription(desc string) func(*ResourceInfo) {
 	return func(r *ResourceInfo) { r.Description = desc }
 }
 
+// WithMIMEType sets the MIME type for a resource.
 func WithMIMEType(mime string) func(*ResourceInfo) {
 	return func(r *ResourceInfo) { r.MIMEType = mime }
 }
 
+// WithTemplateDescription sets the description for a resource template.
 func WithTemplateDescription(desc string) func(*ResourceTemplateInfo) {
 	return func(r *ResourceTemplateInfo) { r.Description = desc }
 }
 
+// WithTemplateMIMEType sets the MIME type for a resource template.
 func WithTemplateMIMEType(mime string) func(*ResourceTemplateInfo) {
 	return func(r *ResourceTemplateInfo) { r.MIMEType = mime }
 }

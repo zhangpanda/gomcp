@@ -12,37 +12,44 @@ type promptEntry struct {
 
 // MCP Prompt types
 
+// PromptInfo describes a registered prompt template.
 type PromptInfo struct {
 	Name        string           `json:"name"`
 	Description string           `json:"description,omitempty"`
 	Arguments   []PromptArgument `json:"arguments,omitempty"`
 }
 
+// PromptArgument describes a prompt parameter.
 type PromptArgument struct {
 	Name        string `json:"name"`
 	Description string `json:"description,omitempty"`
 	Required    bool   `json:"required,omitempty"`
 }
 
+// PromptMessage is a single message in a prompt response.
 type PromptMessage struct {
 	Role    string       `json:"role"`
 	Content PromptContent `json:"content"`
 }
 
+// PromptContent holds the content of a prompt message.
 type PromptContent struct {
 	Type string `json:"type"`
 	Text string `json:"text,omitempty"`
 }
 
+// PromptListResult is the response to prompts/list.
 type PromptListResult struct {
 	Prompts []PromptInfo `json:"prompts"`
 }
 
+// GetPromptParams is the request parameters for prompts/get.
 type GetPromptParams struct {
 	Name      string            `json:"name"`
 	Arguments map[string]string `json:"arguments,omitempty"`
 }
 
+// GetPromptResult is the response to prompts/get.
 type GetPromptResult struct {
 	Description string          `json:"description,omitempty"`
 	Messages    []PromptMessage `json:"messages"`
@@ -50,10 +57,12 @@ type GetPromptResult struct {
 
 // Helper constructors
 
+// UserMsg creates a user-role prompt message.
 func UserMsg(text string) PromptMessage {
 	return PromptMessage{Role: "user", Content: PromptContent{Type: "text", Text: text}}
 }
 
+// AssistantMsg creates an assistant-role prompt message.
 func AssistantMsg(text string) PromptMessage {
 	return PromptMessage{Role: "assistant", Content: PromptContent{Type: "text", Text: text}}
 }
