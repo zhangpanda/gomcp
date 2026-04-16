@@ -26,7 +26,7 @@ GoMCP is a framework — not just an SDK — for building [Model Context Protoco
 ## Quick Start
 
 ```bash
-go get github.com/istarshine/gomcp
+go get github.com/zhangpanda/gomcp
 ```
 
 ```go
@@ -34,7 +34,7 @@ package main
 
 import (
     "fmt"
-    "github.com/istarshine/gomcp"
+    "github.com/zhangpanda/gomcp"
 )
 
 type SearchInput struct {

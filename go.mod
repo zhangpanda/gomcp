@@ -1,4 +1,4 @@
-module github.com/istarshine/gomcp
+module github.com/zhangpanda/gomcp
 
 go 1.25.0
 

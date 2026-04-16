@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/istarshine/gomcp"
+	"github.com/zhangpanda/gomcp"
 )
 
 // Client is an in-memory MCP client for testing servers without transport.

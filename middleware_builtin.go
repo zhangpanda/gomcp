@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/istarshine/gomcp/internal/uid"
+	"github.com/zhangpanda/gomcp/internal/uid"
 )
 
 // Logger returns a middleware that logs tool calls with duration.

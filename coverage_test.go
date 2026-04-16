@@ -3,8 +3,8 @@ package gomcp_test
 import (
 	"testing"
 
-	"github.com/istarshine/gomcp"
-	"github.com/istarshine/gomcp/mcptest"
+	"github.com/zhangpanda/gomcp"
+	"github.com/zhangpanda/gomcp/mcptest"
 )
 
 // --- Group.ToolFunc ---

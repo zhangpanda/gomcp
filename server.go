@@ -8,7 +8,7 @@ import (
 	"reflect"
 	"sync"
 
-	"github.com/istarshine/gomcp/schema"
+	"github.com/zhangpanda/gomcp/schema"
 )
 
 const protocolVersion = "2024-11-05"

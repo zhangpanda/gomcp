@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/istarshine/gomcp/transport"
+	"github.com/zhangpanda/gomcp/transport"
 )
 
 // auth context keys

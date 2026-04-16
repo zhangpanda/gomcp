@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/istarshine/gomcp"
-	"github.com/istarshine/gomcp/transport"
+	"github.com/zhangpanda/gomcp"
+	"github.com/zhangpanda/gomcp/transport"
 )
 
 func ctxWithAuth(scheme, cred string) context.Context {

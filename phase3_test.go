@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/istarshine/gomcp"
+	"github.com/zhangpanda/gomcp"
 )
 
 // --- Version tests ---

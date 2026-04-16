@@ -3,7 +3,7 @@ package gomcp
 import (
 	"reflect"
 
-	"github.com/istarshine/gomcp/schema"
+	"github.com/zhangpanda/gomcp/schema"
 )
 
 func generateSchema(t reflect.Type) JSONSchema {

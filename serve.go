@@ -8,7 +8,7 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/istarshine/gomcp/transport"
+	"github.com/zhangpanda/gomcp/transport"
 )
 
 // Stdio starts the server over stdin/stdout.

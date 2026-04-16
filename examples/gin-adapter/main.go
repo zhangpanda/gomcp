@@ -5,8 +5,8 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"github.com/istarshine/gomcp"
-	"github.com/istarshine/gomcp/adapter"
+	"github.com/zhangpanda/gomcp"
+	"github.com/zhangpanda/gomcp/adapter"
 )
 
 // Simulate an existing Gin API

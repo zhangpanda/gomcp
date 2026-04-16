@@ -11,7 +11,7 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
-	"github.com/istarshine/gomcp"
+	"github.com/zhangpanda/gomcp"
 )
 
 // ImportOptions controls which Gin routes are imported as MCP tools.

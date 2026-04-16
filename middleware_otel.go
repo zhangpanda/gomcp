@@ -9,7 +9,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
-const otelScopeName = "github.com/istarshine/gomcp"
+const otelScopeName = "github.com/zhangpanda/gomcp"
 
 // OpenTelemetry returns a middleware that creates a span for each tool call.
 // It uses the globally registered TracerProvider by default.

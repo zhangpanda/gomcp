@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/istarshine/gomcp/internal/uid"
+	"github.com/zhangpanda/gomcp/internal/uid"
 )
 
 // Task states

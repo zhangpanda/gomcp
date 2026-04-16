@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/istarshine/gomcp"
-	"github.com/istarshine/gomcp/transport"
+	"github.com/zhangpanda/gomcp"
+	"github.com/zhangpanda/gomcp/transport"
 )
 
 // === Middleware integration tests ===

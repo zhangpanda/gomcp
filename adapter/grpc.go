@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/istarshine/gomcp"
+	"github.com/zhangpanda/gomcp"
 	"google.golang.org/grpc"
 	rpb "google.golang.org/grpc/reflection/grpc_reflection_v1alpha"
 	"google.golang.org/protobuf/encoding/protojson"

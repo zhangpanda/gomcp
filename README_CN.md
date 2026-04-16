@@ -26,7 +26,7 @@ GoMCP 是一个**框架**，不只是 SDK。它为 [Model Context Protocol](http
 ## 快速开始
 
 ```bash
-go get github.com/istarshine/gomcp
+go get github.com/zhangpanda/gomcp
 ```
 
 ```go
@@ -34,7 +34,7 @@ package main
 
 import (
     "fmt"
-    "github.com/istarshine/gomcp"
+    "github.com/zhangpanda/gomcp"
 )
 
 type SearchInput struct {

@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/istarshine/gomcp"
+	"github.com/zhangpanda/gomcp"
 )
 
 // --- Edge cases: malformed requests ---

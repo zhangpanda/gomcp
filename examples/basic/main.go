@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/istarshine/gomcp"
+	"github.com/zhangpanda/gomcp"
 )
 
 type SearchInput struct {

@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/istarshine/gomcp"
+	"github.com/zhangpanda/gomcp"
 )
 
 func newServer() *gomcp.Server {

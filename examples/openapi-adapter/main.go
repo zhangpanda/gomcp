@@ -3,8 +3,8 @@ package main
 import (
 	"log"
 
-	"github.com/istarshine/gomcp"
-	"github.com/istarshine/gomcp/adapter"
+	"github.com/zhangpanda/gomcp"
+	"github.com/zhangpanda/gomcp/adapter"
 )
 
 func main() {

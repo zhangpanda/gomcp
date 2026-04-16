@@ -9,8 +9,8 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
-	"github.com/istarshine/gomcp"
-	"github.com/istarshine/gomcp/mcptest"
+	"github.com/zhangpanda/gomcp"
+	"github.com/zhangpanda/gomcp/mcptest"
 )
 
 func init() { gin.SetMode(gin.TestMode) }
