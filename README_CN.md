@@ -217,6 +217,7 @@ s.Handler()        // http.Handler，嵌入现有 HTTP 服务
 - [x] 异步任务（Task-augmented Tools）
 - [x] MCP Inspector（Web 调试界面）
 - [x] 热加载 Provider
+- [x] Prompt/Resource 参数自动补全
 - [ ] MCP Client 支持
 - [ ] 插件市场 CLI
 - [ ] 代码生成器

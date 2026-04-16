@@ -217,6 +217,7 @@ s.Handler()        // http.Handler for embedding in existing servers
 - [x] Async tasks (Task-augmented Tools)
 - [x] MCP Inspector (web debug UI)
 - [x] Hot-reload provider
+- [x] Auto-completions for prompt/resource arguments
 - [ ] MCP Client support
 - [ ] Plugin marketplace CLI
 - [ ] Code generator
