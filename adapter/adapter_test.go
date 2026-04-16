@@ -100,6 +100,24 @@ func TestImportGin_PostRoute(t *testing.T) {
 	r.AssertContains(t, "created")
 }
 
+func TestImportGin_QueryParams(t *testing.T) {
+	r := gin.New()
+	r.GET("/api/search", func(c *gin.Context) {
+		q := c.Query("q")
+		page := c.DefaultQuery("page", "1")
+		c.JSON(200, map[string]string{"q": q, "page": page})
+	})
+
+	s := gomcp.New("test", "1.0")
+	ImportGin(s, r, ImportOptions{})
+
+	c := mcptest.NewClient(t, s)
+	result := c.CallTool("get_api_search", map[string]any{"query": "q=hello&page=3"})
+	result.AssertNoError(t)
+	result.AssertContains(t, "hello")
+	result.AssertContains(t, "3")
+}
+
 // --- OpenAPI tests ---
 
 func TestImportOpenAPI(t *testing.T) {
