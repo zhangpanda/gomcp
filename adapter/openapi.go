@@ -15,9 +15,9 @@ import (
 
 // OpenAPIOptions controls OpenAPI import behavior.
 type OpenAPIOptions struct {
-	TagFilter []string // only import operations with these tags
-	ServerURL string   // base URL for API calls
-	AuthToken string   // Bearer token for API calls
+	TagFilter  []string // only import operations with these tags
+	ServerURL  string   // base URL for API calls
+	AuthToken  string   // Bearer token for API calls
 	NamingFunc func(operationID, method, path string) string
 }
 
@@ -30,7 +30,6 @@ func ImportOpenAPI(s *gomcp.Server, filePath string, opts OpenAPIOptions) error 
 
 	var spec openAPISpec
 	if err := yaml.Unmarshal(data, &spec); err != nil {
-		// try JSON
 		if err2 := json.Unmarshal(data, &spec); err2 != nil {
 			return fmt.Errorf("parse openapi: %w", err)
 		}
@@ -54,14 +53,14 @@ func ImportOpenAPI(s *gomcp.Server, filePath string, opts OpenAPIOptions) error 
 				desc = fmt.Sprintf("%s %s", method, path)
 			}
 
-			inputSchema := buildOpSchema(op, method)
+			inputSchema := buildOpSchema(op, method, &spec)
 
 			capturedMethod := method
 			capturedPath := path
 			capturedOp := op
 
 			handler := func(ctx *gomcp.Context) (*gomcp.CallToolResult, error) {
-				return callOpenAPI(baseURL, capturedMethod, capturedPath, capturedOp, opts.AuthToken, ctx)
+				return callOpenAPI(baseURL, capturedMethod, capturedPath, capturedOp, &spec, opts.AuthToken, ctx)
 			}
 
 			s.RegisterToolRaw(toolName, desc, inputSchema, handler)
@@ -70,18 +69,18 @@ func ImportOpenAPI(s *gomcp.Server, filePath string, opts OpenAPIOptions) error 
 	return nil
 }
 
-func callOpenAPI(baseURL, method, path string, op openAPIOperation, authToken string, ctx *gomcp.Context) (*gomcp.CallToolResult, error) {
-	// substitute path params
+func callOpenAPI(baseURL, method, path string, op openAPIOperation, spec *openAPISpec, authToken string, ctx *gomcp.Context) (*gomcp.CallToolResult, error) {
 	actualPath := path
 	for _, p := range op.Parameters {
+		p = spec.resolveParam(p)
 		if p.In == "path" {
 			actualPath = strings.ReplaceAll(actualPath, "{"+p.Name+"}", ctx.String(p.Name))
 		}
 	}
 
-	// build query
 	var queryParts []string
 	for _, p := range op.Parameters {
+		p = spec.resolveParam(p)
 		if p.In == "query" {
 			if v := ctx.String(p.Name); v != "" {
 				queryParts = append(queryParts, p.Name+"="+v)
@@ -94,10 +93,27 @@ func callOpenAPI(baseURL, method, path string, op openAPIOperation, authToken st
 		fullURL += "?" + strings.Join(queryParts, "&")
 	}
 
-	// body
+	// build body from requestBody schema fields or raw "body" param
 	var bodyReader io.Reader
-	if bodyStr := ctx.String("body"); bodyStr != "" {
-		bodyReader = bytes.NewBufferString(bodyStr)
+	if op.RequestBody != nil {
+		bodySchema := spec.resolveSchema(op.RequestBody.jsonSchema(spec))
+		if bodySchema.Type == "object" && len(bodySchema.Properties) > 0 {
+			bodyMap := make(map[string]any)
+			for name := range bodySchema.Properties {
+				if v := ctx.String(name); v != "" {
+					bodyMap[name] = v
+				}
+			}
+			if len(bodyMap) > 0 {
+				data, _ := json.Marshal(bodyMap)
+				bodyReader = bytes.NewReader(data)
+			}
+		}
+	}
+	if bodyReader == nil {
+		if bodyStr := ctx.String("body"); bodyStr != "" {
+			bodyReader = bytes.NewBufferString(bodyStr)
+		}
 	}
 
 	req, err := http.NewRequest(strings.ToUpper(method), fullURL, bodyReader)
@@ -124,14 +140,21 @@ func callOpenAPI(baseURL, method, path string, op openAPIOperation, authToken st
 	return gomcp.TextResult(string(respBody)), nil
 }
 
-func buildOpSchema(op openAPIOperation, method string) gomcp.JSONSchema {
+func buildOpSchema(op openAPIOperation, method string, spec *openAPISpec) gomcp.JSONSchema {
 	props := make(map[string]gomcp.JSONSchema)
 	var required []string
 
 	for _, p := range op.Parameters {
+		p = spec.resolveParam(p)
+		s := spec.resolveSchema(p.Schema)
 		prop := gomcp.JSONSchema{
-			Type:        schemaType(p.Schema.Type),
+			Type:        schemaType(s.Type),
 			Description: p.Description,
+		}
+		if len(s.Enum) > 0 {
+			for _, e := range s.Enum {
+				prop.Enum = append(prop.Enum, e)
+			}
 		}
 		props[p.Name] = prop
 		if p.Required {
@@ -139,8 +162,30 @@ func buildOpSchema(op openAPIOperation, method string) gomcp.JSONSchema {
 		}
 	}
 
-	if method == "post" || method == "put" || method == "patch" {
-		props["body"] = gomcp.JSONSchema{Type: "string", Description: "JSON request body"}
+	// extract requestBody schema properties as individual tool params
+	if op.RequestBody != nil {
+		bodySchema := spec.resolveSchema(op.RequestBody.jsonSchema(spec))
+		if bodySchema.Type == "object" && len(bodySchema.Properties) > 0 {
+			for name, propSchema := range bodySchema.Properties {
+				ps := spec.resolveSchema(propSchema)
+				prop := gomcp.JSONSchema{
+					Type:        schemaType(ps.Type),
+					Description: ps.Description,
+				}
+				if len(ps.Enum) > 0 {
+					for _, e := range ps.Enum {
+						prop.Enum = append(prop.Enum, e)
+					}
+				}
+				props[name] = prop
+			}
+			for _, r := range bodySchema.Required {
+				required = append(required, r)
+			}
+		} else {
+			// fallback: raw body string
+			props["body"] = gomcp.JSONSchema{Type: "string", Description: "JSON request body"}
+		}
 	}
 
 	return gomcp.JSONSchema{Type: "object", Properties: props, Required: required}
@@ -153,7 +198,6 @@ func opToolName(opID, method, path string, custom func(string, string, string) s
 	if opID != "" {
 		return opID
 	}
-	// fallback: method_path
 	name := strings.ToLower(method)
 	for _, seg := range strings.Split(strings.Trim(path, "/"), "/") {
 		if strings.HasPrefix(seg, "{") {
@@ -186,13 +230,73 @@ func schemaType(t string) string {
 	return t
 }
 
-// Minimal OpenAPI 3.x structs (just enough for tool generation)
+// --- OpenAPI 3.x structs with $ref support ---
 
 type openAPISpec struct {
-	Paths   map[string]openAPIPathItem `json:"paths" yaml:"paths"`
-	Servers []struct {
+	Paths      map[string]openAPIPathItem `json:"paths" yaml:"paths"`
+	Servers    []struct {
 		URL string `json:"url" yaml:"url"`
 	} `json:"servers" yaml:"servers"`
+	Components openAPIComponents `json:"components" yaml:"components"`
+}
+
+// resolveSchema follows $ref to return the concrete schema.
+func (s *openAPISpec) resolveSchema(schema openAPISchema) openAPISchema {
+	for i := 0; i < 10 && schema.Ref != ""; i++ { // depth limit
+		resolved, ok := s.lookupRef(schema.Ref)
+		if !ok {
+			break
+		}
+		schema = resolved
+	}
+	// resolve property refs
+	if len(schema.Properties) > 0 {
+		resolved := make(map[string]openAPISchema, len(schema.Properties))
+		for k, v := range schema.Properties {
+			resolved[k] = s.resolveSchema(v)
+		}
+		schema.Properties = resolved
+	}
+	// resolve items ref
+	if schema.Items != nil {
+		r := s.resolveSchema(*schema.Items)
+		schema.Items = &r
+	}
+	return schema
+}
+
+// resolveParam follows $ref on parameters.
+func (s *openAPISpec) resolveParam(p openAPIParameter) openAPIParameter {
+	for i := 0; i < 10 && p.Ref != ""; i++ {
+		name := refName(p.Ref)
+		if rp, ok := s.Components.Parameters[name]; ok {
+			p = rp
+		} else {
+			break
+		}
+	}
+	return p
+}
+
+func (s *openAPISpec) lookupRef(ref string) (openAPISchema, bool) {
+	name := refName(ref)
+	if schema, ok := s.Components.Schemas[name]; ok {
+		return schema, true
+	}
+	return openAPISchema{}, false
+}
+
+// refName extracts the name from "#/components/schemas/Foo" → "Foo"
+func refName(ref string) string {
+	if i := strings.LastIndex(ref, "/"); i >= 0 {
+		return ref[i+1:]
+	}
+	return ref
+}
+
+type openAPIComponents struct {
+	Schemas    map[string]openAPISchema    `json:"schemas" yaml:"schemas"`
+	Parameters map[string]openAPIParameter `json:"parameters" yaml:"parameters"`
 }
 
 type openAPIPathItem struct {
@@ -224,20 +328,52 @@ func (p openAPIPathItem) Operations() map[string]openAPIOperation {
 }
 
 type openAPIOperation struct {
-	OperationID string             `json:"operationId" yaml:"operationId"`
-	Summary     string             `json:"summary" yaml:"summary"`
-	Tags        []string           `json:"tags" yaml:"tags"`
-	Parameters  []openAPIParameter `json:"parameters" yaml:"parameters"`
+	OperationID string              `json:"operationId" yaml:"operationId"`
+	Summary     string              `json:"summary" yaml:"summary"`
+	Tags        []string            `json:"tags" yaml:"tags"`
+	Parameters  []openAPIParameter  `json:"parameters" yaml:"parameters"`
+	RequestBody *openAPIRequestBody `json:"requestBody" yaml:"requestBody"`
 }
 
 type openAPIParameter struct {
-	Name        string          `json:"name" yaml:"name"`
-	In          string          `json:"in" yaml:"in"`
-	Required    bool            `json:"required" yaml:"required"`
-	Description string          `json:"description" yaml:"description"`
-	Schema      openAPISchema   `json:"schema" yaml:"schema"`
+	Ref         string        `json:"$ref" yaml:"$ref"`
+	Name        string        `json:"name" yaml:"name"`
+	In          string        `json:"in" yaml:"in"`
+	Required    bool          `json:"required" yaml:"required"`
+	Description string        `json:"description" yaml:"description"`
+	Schema      openAPISchema `json:"schema" yaml:"schema"`
+}
+
+type openAPIRequestBody struct {
+	Description string                          `json:"description" yaml:"description"`
+	Required    bool                            `json:"required" yaml:"required"`
+	Content     map[string]openAPIMediaType     `json:"content" yaml:"content"`
+}
+
+func (rb *openAPIRequestBody) jsonSchema(spec *openAPISpec) openAPISchema {
+	if rb == nil {
+		return openAPISchema{}
+	}
+	if mt, ok := rb.Content["application/json"]; ok {
+		return mt.Schema
+	}
+	// fallback: try first content type
+	for _, mt := range rb.Content {
+		return mt.Schema
+	}
+	return openAPISchema{}
+}
+
+type openAPIMediaType struct {
+	Schema openAPISchema `json:"schema" yaml:"schema"`
 }
 
 type openAPISchema struct {
-	Type string `json:"type" yaml:"type"`
+	Ref         string                     `json:"$ref" yaml:"$ref"`
+	Type        string                     `json:"type" yaml:"type"`
+	Description string                     `json:"description" yaml:"description"`
+	Properties  map[string]openAPISchema   `json:"properties" yaml:"properties"`
+	Required    []string                   `json:"required" yaml:"required"`
+	Items       *openAPISchema             `json:"items" yaml:"items"`
+	Enum        []string                   `json:"enum" yaml:"enum"`
 }

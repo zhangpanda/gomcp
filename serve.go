@@ -3,6 +3,7 @@ package gomcp
 import (
 	"context"
 	"encoding/json"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
@@ -21,13 +22,20 @@ func (s *Server) HTTP(addr string) error {
 	s.logger.Info("starting MCP server", "name", s.name, "version", s.version, "transport", "http", "addr", addr)
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	return transport.ServeHTTPAddr(ctx, addr, s.rawHandler)
+
+	hs := transport.NewHTTPServer(s.rawHandler)
+	s.notifyFn = hs.Notify
+
+	mux := http.NewServeMux()
+	mux.Handle("/mcp", hs)
+	return transport.ServeHTTPAddrWithHandler(ctx, addr, mux)
 }
 
 // Handler returns an http.Handler for embedding in existing HTTP servers.
-func (s *Server) Handler() interface{ ServeHTTP(interface{}, interface{}) } {
-	// Return the raw handler for advanced use; users should use HTTP() for simple cases.
-	return nil
+func (s *Server) Handler() http.Handler {
+	hs := transport.NewHTTPServer(s.rawHandler)
+	s.notifyFn = hs.Notify
+	return hs
 }
 
 // rawHandler adapts the transport.MessageHandler signature.

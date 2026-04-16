@@ -65,11 +65,12 @@ func PromptArg(name, desc string, required bool) PromptArgument {
 // Prompt registers a prompt template.
 func (s *Server) Prompt(name, description string, args []PromptArgument, handler PromptHandler) {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	s.prompts = append(s.prompts, promptEntry{
 		info:    PromptInfo{Name: name, Description: description, Arguments: args},
 		handler: handler,
 	})
+	s.mu.Unlock()
+	s.notify("notifications/prompts/list_changed")
 }
 
 // handlers

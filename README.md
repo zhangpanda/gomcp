@@ -13,7 +13,7 @@ GoMCP is a framework — not just an SDK — for building [Model Context Protoco
 - **Resource & Prompt** — full MCP support including URI templates and parameterized prompts
 - **Parameter validation** — required, min/max, enum, pattern — checked before your handler runs
 - **Multiple transports** — stdio (Claude Desktop, Cursor, Kiro) and Streamable HTTP (remote deployment)
-- **Zero dependencies** — only the Go standard library
+- **Zero-dependency core** — the core framework uses only the Go standard library; adapters (Gin, OpenAPI) and OpenTelemetry middleware bring their own dependencies
 
 ## Quick Start
 

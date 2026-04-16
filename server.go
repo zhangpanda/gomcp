@@ -34,6 +34,7 @@ type Server struct {
 	middlewares       []Middleware
 	logger            *slog.Logger
 	mu                sync.RWMutex
+	notifyFn          func(method string, params any) // set by HTTP transport
 }
 
 // Option configures the Server.
@@ -58,10 +59,15 @@ func New(name, version string, opts ...Option) *Server {
 
 func (s *Server) ctx() context.Context { return context.Background() }
 
+func (s *Server) notify(method string) {
+	if s.notifyFn != nil {
+		s.notifyFn(method, nil)
+	}
+}
+
 // Tool registers a tool with a simple HandlerFunc.
 func (s *Server) Tool(name, description string, handler HandlerFunc) {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	s.tools[name] = toolEntry{
 		info: ToolInfo{
 			Name:        name,
@@ -70,16 +76,19 @@ func (s *Server) Tool(name, description string, handler HandlerFunc) {
 		},
 		handler: handler,
 	}
+	s.mu.Unlock()
+	s.notify("notifications/tools/list_changed")
 }
 
 // RegisterToolRaw registers a tool with a pre-built schema (used by adapters).
 func (s *Server) RegisterToolRaw(name, description string, inputSchema JSONSchema, handler HandlerFunc) {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	s.tools[name] = toolEntry{
 		info:    ToolInfo{Name: name, Description: description, InputSchema: inputSchema},
 		handler: handler,
 	}
+	s.mu.Unlock()
+	s.notify("notifications/tools/list_changed")
 }
 
 // ToolFunc registers a tool using a typed function.
@@ -161,7 +170,7 @@ func (s *Server) handleRequestInternal(ctx context.Context, msg *jsonrpcMessage)
 }
 
 func (s *Server) handleInitialize(msg *jsonrpcMessage) *jsonrpcMessage {
-	caps := ServerCapabilities{Tools: &ToolCapability{}}
+	caps := ServerCapabilities{Tools: &ToolCapability{ListChanged: true}}
 
 	s.mu.RLock()
 	hasResources := len(s.resources) > 0 || len(s.resourceTemplates) > 0
@@ -169,10 +178,10 @@ func (s *Server) handleInitialize(msg *jsonrpcMessage) *jsonrpcMessage {
 	s.mu.RUnlock()
 
 	if hasResources {
-		caps.Resources = &ResourceCapability{}
+		caps.Resources = &ResourceCapability{ListChanged: true}
 	}
 	if hasPrompts {
-		caps.Prompts = &PromptCapability{}
+		caps.Prompts = &PromptCapability{ListChanged: true}
 	}
 
 	return newResponse(msg.ID, InitializeResult{

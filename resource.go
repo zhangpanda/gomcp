@@ -66,8 +66,9 @@ func (s *Server) Resource(uri, name string, handler ResourceHandler, opts ...fun
 		o(&info)
 	}
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	s.resources = append(s.resources, resourceEntry{info: info, handler: handler})
+	s.mu.Unlock()
+	s.notify("notifications/resources/list_changed")
 }
 
 // ResourceTemplate registers a dynamic resource with URI template (e.g. "db://{table}/{id}").
@@ -86,13 +87,14 @@ func (s *Server) ResourceTemplate(uriTemplate, name string, handler ResourceHand
 	regexStr := "^" + paramRe.ReplaceAllString(uriTemplate, `([^/]+)`) + "$"
 
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	s.resourceTemplates = append(s.resourceTemplates, resourceTemplateEntry{
 		info:    info,
 		handler: handler,
 		regex:   regexp.MustCompile(regexStr),
 		params:  params,
 	})
+	s.mu.Unlock()
+	s.notify("notifications/resources/list_changed")
 }
 
 // Resource option helpers

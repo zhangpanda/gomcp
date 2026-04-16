@@ -24,11 +24,13 @@ func Logger() Middleware {
 
 // Recovery returns a middleware that recovers from panics.
 func Recovery() Middleware {
-	return func(ctx *Context, next func() error) error {
+	return func(ctx *Context, next func() error) (retErr error) {
 		defer func() {
 			if r := recover(); r != nil {
+				msg := fmt.Sprintf("internal error: %v", r)
 				ctx.Logger().Error("panic recovered", "panic", fmt.Sprintf("%v", r))
-				ctx.Set("_panic", fmt.Sprintf("internal error: %v", r))
+				ctx.Set("_panic", msg)
+				retErr = fmt.Errorf("%s", msg)
 			}
 		}()
 		return next()
@@ -46,6 +48,7 @@ func RequestID() Middleware {
 }
 
 // Timeout returns a middleware that enforces a deadline on tool execution.
+// Handlers should check ctx.Context().Done() to cooperatively cancel long-running work.
 func Timeout(d time.Duration) Middleware {
 	return func(ctx *Context, next func() error) error {
 		tctx, cancel := context.WithTimeout(ctx.ctx, d)
@@ -67,11 +70,11 @@ func Timeout(d time.Duration) Middleware {
 // RateLimit returns a middleware that limits calls to n per minute using a token bucket.
 func RateLimit(perMinute int) Middleware {
 	bucket := &tokenBucket{
-		tokens:   perMinute,
-		max:      perMinute,
-		interval: time.Minute / time.Duration(perMinute),
+		tokens:   float64(perMinute),
+		max:      float64(perMinute),
+		rate:     float64(perMinute) / 60.0, // tokens per second
+		lastTime: time.Now(),
 	}
-	go bucket.refill()
 
 	return func(ctx *Context, next func() error) error {
 		if !bucket.take() {
@@ -83,29 +86,26 @@ func RateLimit(perMinute int) Middleware {
 
 type tokenBucket struct {
 	mu       sync.Mutex
-	tokens   int
-	max      int
-	interval time.Duration
+	tokens   float64
+	max      float64
+	rate     float64 // tokens per second
+	lastTime time.Time
 }
 
 func (b *tokenBucket) take() bool {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	if b.tokens > 0 {
+
+	now := time.Now()
+	b.tokens += now.Sub(b.lastTime).Seconds() * b.rate
+	b.lastTime = now
+	if b.tokens > b.max {
+		b.tokens = b.max
+	}
+
+	if b.tokens >= 1 {
 		b.tokens--
 		return true
 	}
 	return false
-}
-
-func (b *tokenBucket) refill() {
-	ticker := time.NewTicker(b.interval)
-	defer ticker.Stop()
-	for range ticker.C {
-		b.mu.Lock()
-		if b.tokens < b.max {
-			b.tokens++
-		}
-		b.mu.Unlock()
-	}
 }

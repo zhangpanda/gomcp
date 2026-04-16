@@ -6,17 +6,53 @@ import (
 	"io"
 	"net/http"
 	"sync"
+	"time"
 )
 
 // HTTPServer serves MCP over Streamable HTTP (POST for requests, GET for SSE notifications).
 type HTTPServer struct {
 	handler MessageHandler
 	mu      sync.Mutex
+	clients map[chan []byte]struct{} // SSE client channels
 }
 
 // NewHTTPServer creates a Streamable HTTP transport.
 func NewHTTPServer(handler MessageHandler) *HTTPServer {
-	return &HTTPServer{handler: handler}
+	return &HTTPServer{
+		handler: handler,
+		clients: make(map[chan []byte]struct{}),
+	}
+}
+
+// Notify sends a JSON-RPC notification to all connected SSE clients.
+func (s *HTTPServer) Notify(method string, params any) {
+	msg := map[string]any{"jsonrpc": "2.0", "method": method}
+	if params != nil {
+		msg["params"] = params
+	}
+	data, _ := json.Marshal(msg)
+	event := []byte("data: " + string(data) + "\n\n")
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for ch := range s.clients {
+		select {
+		case ch <- event:
+		default: // drop if client is slow
+		}
+	}
+}
+
+func (s *HTTPServer) addClient(ch chan []byte) {
+	s.mu.Lock()
+	s.clients[ch] = struct{}{}
+	s.mu.Unlock()
+}
+
+func (s *HTTPServer) removeClient(ch chan []byte) {
+	s.mu.Lock()
+	delete(s.clients, ch)
+	s.mu.Unlock()
 }
 
 // ServeHTTP implements http.Handler.
@@ -25,18 +61,37 @@ func (s *HTTPServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case http.MethodPost:
 		s.handlePost(w, r)
 	case http.MethodGet:
-		// SSE endpoint for server-initiated notifications (placeholder)
-		w.Header().Set("Content-Type", "text/event-stream")
-		w.Header().Set("Cache-Control", "no-cache")
-		w.Header().Set("Connection", "keep-alive")
-		w.WriteHeader(http.StatusOK)
-		if f, ok := w.(http.Flusher); ok {
-			f.Flush()
-		}
-		// hold connection open until client disconnects
-		<-r.Context().Done()
+		s.handleSSE(w, r)
 	default:
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+func (s *HTTPServer) handleSSE(w http.ResponseWriter, r *http.Request) {
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		http.Error(w, "streaming not supported", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.WriteHeader(http.StatusOK)
+	flusher.Flush()
+
+	ch := make(chan []byte, 32)
+	s.addClient(ch)
+	defer s.removeClient(ch)
+
+	for {
+		select {
+		case event := <-ch:
+			w.Write(event)
+			flusher.Flush()
+		case <-r.Context().Done():
+			return
+		}
 	}
 }
 
@@ -48,15 +103,28 @@ func (s *HTTPServer) handlePost(w http.ResponseWriter, r *http.Request) {
 	}
 	defer r.Body.Close()
 
-	resp := s.handler(r.Context(), body)
-	if resp == nil {
-		// notification — no response body
+	msgs, isBatch := ParseBatch(body)
+
+	responses := make([]json.RawMessage, 0, len(msgs))
+	for _, msg := range msgs {
+		resp := s.handler(r.Context(), msg)
+		if resp != nil {
+			responses = append(responses, resp)
+		}
+	}
+
+	if len(responses) == 0 {
 		w.WriteHeader(http.StatusAccepted)
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	w.Write(resp)
+	if isBatch {
+		batch, _ := json.Marshal(responses)
+		w.Write(batch)
+	} else {
+		w.Write(responses[0])
+	}
 }
 
 // ServeHTTPAddr starts an HTTP server on the given address.
@@ -64,15 +132,21 @@ func ServeHTTPAddr(ctx context.Context, addr string, handler MessageHandler) err
 	hs := NewHTTPServer(handler)
 	mux := http.NewServeMux()
 	mux.Handle("/mcp", hs)
+	return ServeHTTPAddrWithHandler(ctx, addr, mux)
+}
 
-	srv := &http.Server{Addr: addr, Handler: mux}
+// ServeHTTPAddrWithHandler starts an HTTP server with a custom handler.
+func ServeHTTPAddrWithHandler(ctx context.Context, addr string, handler http.Handler) error {
+	srv := &http.Server{Addr: addr, Handler: handler}
 
 	errCh := make(chan error, 1)
 	go func() { errCh <- srv.ListenAndServe() }()
 
 	select {
 	case <-ctx.Done():
-		return srv.Close()
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		return srv.Shutdown(shutdownCtx)
 	case err := <-errCh:
 		return err
 	}
