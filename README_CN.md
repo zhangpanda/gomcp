@@ -3,6 +3,7 @@
 [![Go Version](https://img.shields.io/badge/Go-1.25+-00ADD8?style=flat&logo=go)](https://go.dev)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![Release](https://img.shields.io/badge/Release-v1.0.0-green.svg)](https://github.com/zhangpanda/gomcp/releases)
+[![gomcp MCP server](https://glama.ai/mcp/servers/zhangpanda/gomcp/badges/score.svg)](https://glama.ai/mcp/servers/zhangpanda/gomcp)
 
 **用 Go 构建 MCP Server 的最快方式。**
 
