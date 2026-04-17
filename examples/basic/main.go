@@ -10,8 +10,8 @@ import (
 )
 
 type SearchInput struct {
-	Query string `json:"query" mcp:"required,desc=Search keyword"`
-	Limit int    `json:"limit" mcp:"default=10,min=1,max=100"`
+	Query string `json:"query" mcp:"required,desc=The search query string. Supports keywords and phrases to match against document titles and content."`
+	Limit int    `json:"limit" mcp:"default=10,min=1,max=100,desc=Maximum number of results to return. Use smaller values for quick lookups and larger values for comprehensive searches."`
 }
 
 type SearchResult struct {
@@ -30,7 +30,7 @@ func main() {
 	s.Use(gomcp.RateLimit(600))
 
 	// --- Tools ---
-	s.Tool("hello", "Say hello", func(ctx *gomcp.Context) (*gomcp.CallToolResult, error) {
+	s.Tool("hello", "Greet a user by name. Returns a personalized greeting message. If no name is provided, defaults to 'World'. Use this tool to test basic server connectivity.", func(ctx *gomcp.Context) (*gomcp.CallToolResult, error) {
 		name := ctx.String("name")
 		if name == "" {
 			name = "World"
@@ -40,22 +40,22 @@ func main() {
 
 	// --- Tool Groups ---
 	search := s.Group("search")
-	search.ToolFunc("docs", "Search documents", func(ctx *gomcp.Context, in SearchInput) (SearchResult, error) {
+	search.ToolFunc("docs", "Search documents by keyword. Returns matching documents with titles and content snippets. Supports pagination via the limit parameter.", func(ctx *gomcp.Context, in SearchInput) (SearchResult, error) {
 		items := []string{fmt.Sprintf("Doc result for %q", in.Query)}
 		return SearchResult{Items: items, Total: len(items)}, nil
 	})
 
 	// --- Component Versioning ---
-	s.ToolFunc("search", "Search v1", func(ctx *gomcp.Context, in SearchInput) (SearchResult, error) {
+	s.ToolFunc("search", "Full-text keyword search across all indexed content. Returns results ranked by relevance score. Use this for exact keyword matching.", func(ctx *gomcp.Context, in SearchInput) (SearchResult, error) {
 		return SearchResult{Items: []string{"v1:" + in.Query}, Total: 1}, nil
 	}, gomcp.Version("1.0"))
 
-	s.ToolFunc("search", "Search v2 with semantic matching", func(ctx *gomcp.Context, in SearchInput) (SearchResult, error) {
+	s.ToolFunc("search", "Semantic search with embedding-based matching. Returns results ranked by semantic similarity. Use this when the user's intent matters more than exact keywords.", func(ctx *gomcp.Context, in SearchInput) (SearchResult, error) {
 		return SearchResult{Items: []string{"v2:" + in.Query, "semantic:" + in.Query}, Total: 2}, nil
 	}, gomcp.Version("2.0"))
 
 	// --- Async Task ---
-	s.AsyncTool("report", "Generate a slow report", func(ctx *gomcp.Context) (*gomcp.CallToolResult, error) {
+	s.AsyncTool("report", "Generate an analytics report for a given topic. This is a long-running operation that executes asynchronously. Returns a task ID immediately; poll tasks/get for the result. Use this for comprehensive data analysis that may take several minutes.", func(ctx *gomcp.Context) (*gomcp.CallToolResult, error) {
 		time.Sleep(2 * time.Second) // simulate work
 		return ctx.Text("Report complete for: " + ctx.String("topic")), nil
 	})
