@@ -452,21 +452,21 @@ Please read the [Contributing Guide](CONTRIBUTING.md) before submitting.
 
 ## ⚖️ Copyright & License
 
-Copyright © 2026 [istarshine](https://gitee.com/rilegouasas)
+Copyright © 2026 GoMCP Contributors
 
-This project is licensed under the [Apache License 2.0](LICENSE).
+Licensed under the [Apache License 2.0](LICENSE).
 
 ### Important Notes
 
-1. This project is **open source and free** for personal and commercial use under the Apache 2.0 license.
-2. You **must retain** the copyright notice and license text in all copies or substantial portions of the software.
+1. This project is **open source and free** for both personal and commercial use under the Apache 2.0 license.
+2. You **must retain** the copyright notice, license text, and any attribution notices in all copies or substantial portions of the software.
 3. The Apache 2.0 license includes an **express grant of patent rights** from contributors to users.
-4. If you use this project in a commercial product, you are welcome to (but not required to) credit GoMCP in your documentation.
-5. Contributions to this project are licensed under the same Apache 2.0 license.
+4. Contributions to this project are licensed under the same Apache 2.0 license.
+5. Unauthorized removal of copyright notices may result in legal action.
 
 ### Patent Notice
 
-Certain features of this framework (struct-tag schema generation, HTTP-to-MCP adapter, OpenAPI-to-MCP adapter) are the subject of pending patent applications. The Apache 2.0 license grants you a perpetual, worldwide, royalty-free patent license to use these features as part of this software.
+Certain features of this framework (struct-tag schema generation, HTTP-to-MCP automatic adapter, OpenAPI-to-MCP automatic adapter) are the subject of pending patent applications. The Apache 2.0 license grants you a perpetual, worldwide, royalty-free patent license to use these features as part of this software.
 
 ---
 
