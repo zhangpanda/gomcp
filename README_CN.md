@@ -397,7 +397,6 @@ s.Handler()        // 嵌入现有 HTTP 服务
 - [x] MCP Inspector Web 调试界面
 - [x] YAML 热加载 Provider
 - [x] Prompt/Resource 参数自动补全
-- [ ] MCP Client 支持（Server 间调用）
 
 ---
 

@@ -431,7 +431,6 @@ Works with Claude Desktop, Cursor, Kiro, Windsurf, VS Code Copilot, and any MCP-
 - [x] MCP Inspector web debug UI
 - [x] Hot-reload provider from YAML
 - [x] Auto-completions for prompt/resource arguments
-- [ ] MCP Client support (server-to-server calls)
 
 ---
 
