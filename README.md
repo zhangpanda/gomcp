@@ -1,6 +1,6 @@
 # GoMCP
 
-[![Go Version](https://img.shields.io/badge/Go-1.22+-00ADD8?style=flat&logo=go)](https://go.dev)
+[![Go Version](https://img.shields.io/badge/Go-1.25+-00ADD8?style=flat&logo=go)](https://go.dev)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![Release](https://img.shields.io/badge/Release-v1.0.0-green.svg)](https://gitee.com/rilegouasas/gomcp/releases)
 
@@ -39,7 +39,7 @@ MCP is the open protocol that lets AI applications (Claude Desktop, Cursor, Kiro
 go get github.com/zhangpanda/gomcp
 ```
 
-Requires Go 1.22+.
+Requires Go 1.25+.
 
 ---
 
