@@ -400,15 +400,11 @@ s.Handler()        // 嵌入现有 HTTP 服务
 
 ---
 
-## 🤝 如何贡献
+## 🤝 问题反馈
 
-欢迎各种形式的贡献！
-
-1. **Fork** 本仓库
-2. **创建** 功能分支（`git checkout -b feature/amazing-feature`）
-3. **提交** 更改（`git commit -m 'feat: add amazing feature'`）
-4. **推送** 分支（`git push origin feature/amazing-feature`）
-5. **发起** Pull Request
+- **Bug 报告**: [GitHub Issues](https://github.com/zhangpanda/gomcp/issues)
+- **功能建议**: [GitHub Issues](https://github.com/zhangpanda/gomcp/issues)
+- **讨论交流**: [GitHub Discussions](https://github.com/zhangpanda/gomcp/discussions)
 
 > 💡 推荐阅读：[《提问的智慧》](https://github.com/ryanhanwu/How-To-Ask-Questions-The-Smart-Way) 和 [《如何向开源社区提问题》](https://github.com/seajs/seajs/issues/545)
 
@@ -438,9 +434,3 @@ Copyright © 2026 GoMCP Contributors
 
 如果 GoMCP 对你有帮助，请给个 Star！这能帮助更多人发现这个项目。
 
----
-
-## 📬 联系方式
-
-- **Issues**: [GitHub Issues](https://github.com/zhangpanda/gomcp/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/zhangpanda/gomcp/discussions)

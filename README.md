@@ -434,17 +434,11 @@ Works with Claude Desktop, Cursor, Kiro, Windsurf, VS Code Copilot, and any MCP-
 
 ---
 
-## 🤝 How to Contribute
+## 🤝 Feedback & Support
 
-We welcome contributions of all kinds!
-
-1. **Fork** the repository
-2. **Create** your feature branch (`git checkout -b feature/amazing-feature`)
-3. **Commit** your changes (`git commit -m 'feat: add amazing feature'`)
-4. **Push** to the branch (`git push origin feature/amazing-feature`)
-5. **Open** a Pull Request
-
-Please read the [Contributing Guide](CONTRIBUTING.md) before submitting.
+- **Bug Reports**: [GitHub Issues](https://github.com/zhangpanda/gomcp/issues)
+- **Feature Requests**: [GitHub Issues](https://github.com/zhangpanda/gomcp/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/zhangpanda/gomcp/discussions)
 
 > 💡 Recommended reading: [How To Ask Questions The Smart Way](https://github.com/ryanhanwu/How-To-Ask-Questions-The-Smart-Way)
 
@@ -474,9 +468,3 @@ Certain features of this framework (struct-tag schema generation, HTTP-to-MCP au
 
 If you find GoMCP useful, please consider giving it a star! It helps others discover the project.
 
----
-
-## 📬 Contact
-
-- **Issues**: [GitHub Issues](https://github.com/zhangpanda/gomcp/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/zhangpanda/gomcp/discussions)
