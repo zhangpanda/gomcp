@@ -20,7 +20,7 @@ type SearchResult struct {
 }
 
 func main() {
-	s := gomcp.New("demo-server", "1.0.0")
+	s := gomcp.New("gomcp-demo", "1.0.0")
 
 	// --- Middleware ---
 	s.Use(gomcp.Recovery())
@@ -30,7 +30,8 @@ func main() {
 	s.Use(gomcp.RateLimit(600))
 
 	// --- Tools ---
-	s.Tool("hello", "Greet a user by name. Returns a personalized greeting message. If no name is provided, defaults to 'World'. Use this tool to test basic server connectivity.", func(ctx *gomcp.Context) (*gomcp.CallToolResult, error) {
+
+	s.Tool("greet_user", "Greet a user by name. Returns a personalized greeting message. If no name is provided, defaults to 'World'. Use this tool to verify server connectivity or welcome a user.", func(ctx *gomcp.Context) (*gomcp.CallToolResult, error) {
 		name := ctx.String("name")
 		if name == "" {
 			name = "World"
@@ -38,26 +39,23 @@ func main() {
 		return ctx.Text(fmt.Sprintf("Hello, %s!", name)), nil
 	})
 
-	// --- Tool Groups ---
-	search := s.Group("search")
-	search.ToolFunc("docs", "Search documents by keyword. Returns matching documents with titles and content snippets. Supports pagination via the limit parameter.", func(ctx *gomcp.Context, in SearchInput) (SearchResult, error) {
-		items := []string{fmt.Sprintf("Doc result for %q", in.Query)}
+	s.ToolFunc("search_documents", "Search documents by keyword using full-text matching. Returns matching documents ranked by relevance with titles and content snippets. Use this when you need to find documents containing specific words or phrases. For semantic meaning-based search, use search_semantic instead.", func(ctx *gomcp.Context, in SearchInput) (SearchResult, error) {
+		items := []string{fmt.Sprintf("Result for %q", in.Query)}
 		return SearchResult{Items: items, Total: len(items)}, nil
 	})
 
-	// --- Component Versioning ---
-	s.ToolFunc("search", "Full-text keyword search across all indexed content. Returns results ranked by relevance score. Use this for exact keyword matching.", func(ctx *gomcp.Context, in SearchInput) (SearchResult, error) {
-		return SearchResult{Items: []string{"v1:" + in.Query}, Total: 1}, nil
-	}, gomcp.Version("1.0"))
+	s.ToolFunc("search_semantic", "Search documents using semantic embedding-based matching. Returns results ranked by meaning similarity rather than exact keyword match. Use this when the user's intent matters more than exact wording. For exact keyword matching, use search_documents instead.", func(ctx *gomcp.Context, in SearchInput) (SearchResult, error) {
+		items := []string{fmt.Sprintf("Semantic result for %q", in.Query)}
+		return SearchResult{Items: items, Total: len(items)}, nil
+	})
 
-	s.ToolFunc("search", "Semantic search with embedding-based matching. Returns results ranked by semantic similarity. Use this when the user's intent matters more than exact keywords.", func(ctx *gomcp.Context, in SearchInput) (SearchResult, error) {
-		return SearchResult{Items: []string{"v2:" + in.Query, "semantic:" + in.Query}, Total: 2}, nil
-	}, gomcp.Version("2.0"))
-
-	// --- Async Task ---
-	s.AsyncTool("report", "Generate an analytics report for a given topic. This is a long-running operation that executes asynchronously. Returns a task ID immediately; poll tasks/get for the result. Use this for comprehensive data analysis that may take several minutes.", func(ctx *gomcp.Context) (*gomcp.CallToolResult, error) {
-		time.Sleep(2 * time.Second) // simulate work
+	s.AsyncTool("generate_report", "Generate an analytics report for a given topic. This is a long-running operation that executes asynchronously and may take several minutes. Returns a task ID immediately; poll tasks/get for the result, or call tasks/cancel to abort. Use this for comprehensive data analysis tasks.", func(ctx *gomcp.Context) (*gomcp.CallToolResult, error) {
+		time.Sleep(2 * time.Second)
 		return ctx.Text("Report complete for: " + ctx.String("topic")), nil
+	})
+
+	s.Tool("get_config", "Retrieve the current server configuration including version, environment, and feature flags. Use this to inspect server state or verify deployment settings. This is a read-only operation with no side effects.", func(ctx *gomcp.Context) (*gomcp.CallToolResult, error) {
+		return ctx.JSON(map[string]any{"version": "1.0.0", "env": "dev", "features": []string{"search", "reports"}}), nil
 	})
 
 	// --- Resource ---
