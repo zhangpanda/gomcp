@@ -2,17 +2,25 @@
 
 [![Go Version](https://img.shields.io/badge/Go-1.25+-00ADD8?style=flat&logo=go)](https://go.dev)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
-[![Release](https://img.shields.io/badge/Release-v1.0.0-green.svg)](https://gitee.com/rilegouasas/gomcp/releases)
+[![Release](https://img.shields.io/badge/Release-v1.0.0-green.svg)](https://github.com/zhangpanda/gomcp/releases)
 
 **用 Go 构建 MCP Server 的最快方式。**
 
-[English](README.md) · [Gitee](https://gitee.com/rilegouasas/gomcp)
+[English](README.md)
 
 ---
 
-## GoMCP 是什么？
+## 🚀 快速链接
 
-GoMCP 是一个用于构建 [Model Context Protocol (MCP)](https://modelcontextprotocol.io) 服务端的 **Go 框架**——不只是 SDK。可以理解为 **"MCP 领域的 Gin"**：把 Go 工程师熟悉的开发体验带到 AI 工具集成领域。
+- **GitHub**: https://github.com/zhangpanda/gomcp
+- **Gitee**: https://gitee.com/rilegouasas/gomcp
+- **MCP 协议**: https://modelcontextprotocol.io
+
+---
+
+## 🎯 GoMCP 是什么？
+
+GoMCP 是一个用于构建 [Model Context Protocol (MCP)](https://modelcontextprotocol.io) 服务端的 **Go 框架**——不只是 SDK。可以理解为 **"MCP 领域的 Gin"**。
 
 MCP 是 Anthropic 发布的开放协议，让 AI 应用（Claude Desktop、Cursor、Kiro、VS Code Copilot）能够调用外部工具、读取数据源、使用 Prompt 模板。GoMCP 让构建这些服务变得极其简单。
 
@@ -21,29 +29,133 @@ MCP 是 Anthropic 发布的开放协议，让 AI 应用（Claude Desktop、Curso
 | | mcp-go (mark3labs) | 官方 Go SDK | **GoMCP** |
 |---|---|---|---|
 | 定位 | SDK | SDK | **框架** |
-| Schema 生成 | 手动 (`mcp.WithString(...)`) | `jsonschema` tag | **`mcp` tag + 自动校验** |
+| Schema 生成 | 手动 | `jsonschema` tag | **`mcp` tag + 自动校验** |
 | 中间件 | 基础钩子 | 无 | **完整链（Logger、Auth、限流、OTel…）** |
 | 工具分组 | 无 | 无 | **支持（`user.get`、`admin.delete`）** |
-| 导入现有 Gin 路由 | 无 | 无 | **一行代码** |
-| 导入 OpenAPI/Swagger | 无 | 无 | **一行代码** |
-| 导入 gRPC 服务 | 无 | 无 | **支持** |
+| 导入 Gin 路由 | 无 | 无 | **✅ 一行代码** |
+| 导入 OpenAPI/Swagger | 无 | 无 | **✅ 一行代码** |
+| 导入 gRPC 服务 | 无 | 无 | **✅** |
 | 内置认证 | 无 | 无 | **Bearer、API Key、Basic + RBAC** |
-| 调试界面 | 无 | 无 | **内置 Inspector** |
+| 调试界面 | 无 | 无 | **✅** |
 | 测试工具 | 基础 | 无 | **mcptest 包** |
 
 ---
 
-## 安装
+## 🛠️ 技术栈
+
+### 环境要求
+
+| 要求 | 版本 |
+|------|------|
+| **Go** | ≥ 1.25 |
+| **MCP 协议** | 2024-11-05（向后兼容 2025-11-25） |
+
+### 核心依赖
+
+| 技术 | 说明 |
+|------|------|
+| **Go 标准库** | 核心框架——零外部依赖 |
+| **Gin** | 仅适配器——导入现有 Gin 路由 |
+| **gRPC** | 仅适配器——导入 gRPC 服务 |
+| **OpenTelemetry** | 可选——分布式追踪 |
+| **YAML v3** | 仅 Provider——热加载工具定义 |
+
+---
+
+## 🌟 核心功能
+
+### 🔧 工具开发
+
+- **Struct tag 自动 schema** — 用 Go 结构体和 `mcp` tag 定义参数，JSON Schema 自动生成
+- **类型安全 handler** — `func(*Context, Input) (Output, error)` — 无需手动解析参数
+- **参数校验** — required、min/max、enum、pattern — handler 执行前自动校验
+- **组件版本化** — 同一工具注册多个版本，客户端通过 `name@version` 调用
+- **异步任务** — 长时间运行的工具立即返回 task ID，支持轮询和取消
+
+### 🔌 适配器（核心差异化）
+
+- **Gin 适配器** — 一行代码将现有 Gin 路由导入为 MCP 工具
+- **OpenAPI 适配器** — 从 Swagger/OpenAPI 3.x 文档自动生成工具
+- **gRPC 适配器** — 将 gRPC 服务方法导入为 MCP 工具
+
+### 🔐 安全
+
+- **BearerAuth** — JWT Token 验证
+- **APIKeyAuth** — 通过 Header 验证 API Key
+- **BasicAuth** — HTTP Basic 认证
+- **RequireRole / RequirePermission** — 基于角色/权限的授权控制
+
+### 🧩 框架能力
+
+- **中间件链** — Logger、Recovery、RequestID、Timeout、RateLimit、OpenTelemetry
+- **工具分组** — 按前缀组织工具，支持分组级中间件
+- **Resource & Prompt** — 完整 MCP 支持，包括 URI 模板和参数化 Prompt
+- **自动补全** — 为 Prompt/Resource 参数提供补全建议
+
+### 🚀 生产就绪
+
+- **多传输层** — stdio（Claude Desktop、Cursor、Kiro）和 Streamable HTTP + SSE
+- **MCP Inspector** — 内置 Web 调试界面，浏览和测试工具
+- **热加载** — 从 YAML 文件加载工具定义，支持文件监听
+- **mcptest 包** — 内存级测试客户端，支持快照测试
+
+---
+
+## 🏗️ 系统架构
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│                         用户代码                              │
+│   s.Tool() / s.ToolFunc() / s.Resource() / s.Prompt()        │
+├──────────────────────────────────────────────────────────────┤
+│                        框架核心层                             │
+│   路由 → 中间件链 → 参数校验 → Handler → 结果构建              │
+├────────────┬─────────────┬───────────────┬───────────────────┤
+│   Schema   │   校验引擎   │    适配器     │    可观测性        │
+│   生成器    │  （自动）    │ Gin/OpenAPI/ │  OTel / Logger    │
+│ (mcp tags) │             │ gRPC          │  / Inspector      │
+├────────────┴─────────────┴───────────────┴───────────────────┤
+│                        协议层                                │
+│          JSON-RPC 2.0 / MCP 协议 / 能力协商                   │
+├──────────────────────────────────────────────────────────────┤
+│                        传输层                                │
+│              stdio  /  Streamable HTTP + SSE                 │
+└──────────────────────────────────────────────────────────────┘
+```
+
+### 项目结构
+
+```
+gomcp/
+├── server.go              # Server 核心，工具/资源/Prompt 注册
+├── context.go             # 请求上下文，类型化参数访问
+├── group.go               # 工具分组
+├── middleware.go           # 中间件接口和链式执行
+├── middleware_builtin.go   # Logger、Recovery、RequestID、Timeout、RateLimit
+├── middleware_auth.go      # BearerAuth、APIKeyAuth、BasicAuth、RBAC
+├── middleware_otel.go      # OpenTelemetry 追踪
+├── schema/                # struct tag → JSON Schema 生成器 + 校验器
+├── transport/             # stdio + Streamable HTTP
+├── adapter/               # Gin、OpenAPI、gRPC 适配器
+├── mcptest/               # 测试工具包
+├── task.go                # 异步任务
+├── completion.go          # 自动补全
+├── inspector.go           # Web 调试界面
+├── provider.go            # YAML 热加载
+└── examples/              # 可运行的示例
+```
+
+---
+
+## 📦 安装
 
 ```bash
 go get github.com/zhangpanda/gomcp
 ```
 
-需要 Go 1.25+。
-
 ---
 
-## 快速开始
+## ⚡ 快速开始
 
 ### 5 行核心代码，一个完整的 MCP Server
 
@@ -77,7 +189,7 @@ func main() {
 }
 ```
 
-`SearchInput` 结构体 **自动生成** 以下 JSON Schema——无需手动定义：
+`SearchInput` 结构体 **自动生成** JSON Schema：
 
 ```json
 {
@@ -90,7 +202,7 @@ func main() {
 }
 ```
 
-参数在 handler 执行前 **自动校验**。如果客户端发送 `{"limit": 200}` 但没有 `query`，会收到：
+无效参数在 handler 执行前 **自动拒绝**：
 
 ```
 validation failed: query: required; limit: must be <= 100
@@ -98,81 +210,9 @@ validation failed: query: required; limit: must be <= 100
 
 ---
 
-## 核心概念
+## 📖 使用指南
 
-### Tool（工具）
-
-AI 模型可以调用的函数。两种注册方式：
-
-**简单 handler**——通过 Context 完全控制：
-
-```go
-s.Tool("hello", "打招呼", func(ctx *gomcp.Context) (*gomcp.CallToolResult, error) {
-    name := ctx.String("name")
-    return ctx.Text(fmt.Sprintf("你好，%s！", name)), nil
-})
-```
-
-**类型化 handler**——struct 输入 + 自动 schema（推荐）：
-
-```go
-type CreateUserInput struct {
-    Name  string `json:"name"  mcp:"required,desc=用户姓名"`
-    Email string `json:"email" mcp:"required,pattern=^[^@]+@[^@]+$"`
-    Age   int    `json:"age"   mcp:"min=0,max=150"`
-}
-
-s.ToolFunc("create_user", "创建新用户", func(ctx *gomcp.Context, in CreateUserInput) (User, error) {
-    return db.CreateUser(in.Name, in.Email, in.Age)
-})
-```
-
-### Resource（资源）
-
-向 AI 模型暴露数据（类似 GET 端点）：
-
-```go
-// 静态资源
-s.Resource("config://app", "应用配置", func(ctx *gomcp.Context) (any, error) {
-    return map[string]any{"version": "1.0", "env": "production"}, nil
-})
-
-// 动态资源（URI 模板）
-s.ResourceTemplate("db://{table}/{id}", "数据库记录", func(ctx *gomcp.Context) (any, error) {
-    table := ctx.String("table")
-    id := ctx.String("id")
-    return db.Find(table, id), nil
-})
-```
-
-### Prompt（提示模板）
-
-可复用的消息模板：
-
-```go
-s.Prompt("code_review", "代码审查助手",
-    []gomcp.PromptArgument{
-        gomcp.PromptArg("language", "编程语言", true),
-        gomcp.PromptArg("focus", "审查重点", false),
-    },
-    func(ctx *gomcp.Context) ([]gomcp.PromptMessage, error) {
-        lang := ctx.String("language")
-        focus := ctx.String("focus")
-        if focus == "" {
-            focus = "bug、性能和安全"
-        }
-        return []gomcp.PromptMessage{
-            gomcp.UserMsg(fmt.Sprintf("请审查以下 %s 代码，重点关注：%s", lang, focus)),
-        }, nil
-    },
-)
-```
-
----
-
-## Struct Tag 参考
-
-`mcp` tag 控制 schema 生成和参数校验：
+### Struct Tag 参考
 
 | Tag | 类型 | 说明 | 示例 |
 |-----|------|------|------|
@@ -181,252 +221,148 @@ s.Prompt("code_review", "代码审查助手",
 | `default` | 任意 | 默认值 | `mcp:"default=10"` |
 | `min` | 数字 | 最小值（含） | `mcp:"min=0"` |
 | `max` | 数字 | 最大值（含） | `mcp:"max=100"` |
-| `enum` | 字符串 | 竖线分隔的枚举值 | `mcp:"enum=asc\|desc\|random"` |
+| `enum` | 字符串 | 竖线分隔的枚举值 | `mcp:"enum=asc\|desc"` |
 | `pattern` | 字符串 | 正则校验 | `mcp:"pattern=^[a-z]+$"` |
 
 组合使用：`mcp:"required,desc=用户邮箱,pattern=^[^@]+@[^@]+$"`
 
-支持的 Go 类型：`string`、`int`、`float64`、`bool`、`[]T`、嵌套 struct。
+### 工具注册
 
----
+**简单 handler：**
 
-## 中间件
-
-GoMCP 使用 Gin 风格的中间件链，按顺序包裹 handler：
-
-```
-请求 → Logger → Recovery → Auth → RateLimit → Handler → RateLimit → Auth → Recovery → Logger → 响应
+```go
+s.Tool("hello", "打招呼", func(ctx *gomcp.Context) (*gomcp.CallToolResult, error) {
+    return ctx.Text("你好，" + ctx.String("name")), nil
+})
 ```
 
-### 内置中间件
+**类型化 handler（推荐）：**
+
+```go
+type Input struct {
+    Name  string `json:"name"  mcp:"required,desc=用户姓名"`
+    Email string `json:"email" mcp:"required,pattern=^[^@]+@[^@]+$"`
+}
+
+s.ToolFunc("create_user", "创建用户", func(ctx *gomcp.Context, in Input) (User, error) {
+    return db.CreateUser(in.Name, in.Email)
+})
+```
+
+### 资源
+
+```go
+// 静态资源
+s.Resource("config://app", "应用配置", func(ctx *gomcp.Context) (any, error) {
+    return map[string]any{"version": "1.0"}, nil
+})
+
+// 动态 URI 模板
+s.ResourceTemplate("db://{table}/{id}", "数据库记录", func(ctx *gomcp.Context) (any, error) {
+    return db.Find(ctx.String("table"), ctx.String("id")), nil
+})
+```
+
+### 中间件
 
 ```go
 s.Use(gomcp.Logger())                              // 记录工具名 + 耗时
-s.Use(gomcp.Recovery())                            // panic 优雅恢复
-s.Use(gomcp.RequestID())                           // 注入唯一请求 ID
+s.Use(gomcp.Recovery())                            // panic 恢复
+s.Use(gomcp.RequestID())                           // 唯一请求 ID
 s.Use(gomcp.Timeout(10 * time.Second))             // 超时控制
-s.Use(gomcp.RateLimit(100))                        // 令牌桶限流：100 次/分钟
-s.Use(gomcp.OpenTelemetry())                       // 自动追踪每次工具调用
+s.Use(gomcp.RateLimit(100))                        // 100 次/分钟限流
+s.Use(gomcp.OpenTelemetry())                       // 分布式追踪
+s.Use(gomcp.BearerAuth(tokenValidator))            // JWT 认证
 ```
 
-### 认证中间件
+### 工具分组
 
 ```go
-// 认证——验证身份
-s.Use(gomcp.BearerAuth(func(token string) (*gomcp.AuthInfo, error) {
-    claims, err := jwt.Verify(token)
-    if err != nil {
-        return nil, err
-    }
-    return &gomcp.AuthInfo{UserID: claims.Sub, Roles: claims.Roles}, nil
-}))
-
-// 授权——检查权限（应用到分组）
-admin := s.Group("admin", gomcp.RequireRole("admin"))
-admin.Tool("delete_user", "删除用户", deleteHandler)
-```
-
-### 自定义中间件
-
-```go
-func AuditLog() gomcp.Middleware {
-    return func(ctx *gomcp.Context, next func() error) error {
-        start := time.Now()
-        err := next()
-        audit.Log(ctx.String("_tool_name"), time.Since(start), err)
-        return err
-    }
-}
-```
-
----
-
-## 工具分组
-
-按业务域组织工具，支持分组级中间件——类似 Gin 的 `RouterGroup`：
-
-```go
-s := gomcp.New("platform", "1.0.0")
-
-// 用户工具——需要认证
 user := s.Group("user", authMiddleware)
-user.Tool("get", "获取用户信息", getUser)         // → user.get
-user.Tool("update", "更新用户信息", updateUser)    // → user.update
+user.Tool("get", "获取用户", getUser)              // → user.get
 
-// 管理员工具——需要 admin 角色
 admin := user.Group("admin", gomcp.RequireRole("admin"))
 admin.Tool("delete", "删除用户", deleteUser)       // → user.admin.delete
 ```
 
----
+### 适配器
 
-## 适配器
-
-**核心差异化功能。** 把现有服务变成 MCP 工具，无需重写任何代码。
-
-### Gin 适配器
-
-已有 Gin API？一行代码接入 MCP：
+**Gin——一行代码导入现有 API：**
 
 ```go
-ginRouter := setupYourExistingGinApp() // 你已有的 100+ 接口的 Gin 应用
-
-s := gomcp.New("my-api", "1.0.0")
 adapter.ImportGin(s, ginRouter, adapter.ImportOptions{
     IncludePaths: []string{"/api/v1/"},
-    ExcludePaths: []string{"/api/v1/internal/"},
 })
-s.Stdio()
+// GET /api/v1/users/:id → Tool get_api_v1_users_by_id
 ```
 
-**自动转换规则：**
-- `GET /api/v1/users` → Tool `get_api_v1_users`
-- `GET /api/v1/users/:id` → Tool `get_api_v1_users_by_id`（id = 必填 string 参数）
-- `POST /api/v1/users` → Tool `post_api_v1_users`（body = JSON 字符串参数）
-- `DELETE /api/v1/users/:id` → Tool `delete_api_v1_users_by_id`
-
-路径参数自动变为必填 Tool 参数。你原有的 Gin 中间件（认证、日志等）照常执行。
-
-### OpenAPI 适配器
-
-有 Swagger/OpenAPI 文档？自动生成 MCP 工具：
+**OpenAPI——从 Swagger 文档生成：**
 
 ```go
-s := gomcp.New("petstore", "1.0.0")
-adapter.ImportOpenAPI(s, "./openapi.yaml", adapter.OpenAPIOptions{
-    TagFilter: []string{"pets", "users"},  // 只导入这些 tag
+adapter.ImportOpenAPI(s, "./swagger.yaml", adapter.OpenAPIOptions{
+    TagFilter: []string{"pets"},
     ServerURL: "https://api.example.com",
-    AuthToken: os.Getenv("API_TOKEN"),
 })
-s.Stdio()
 ```
 
-支持 OpenAPI 3.0/3.1、`$ref` 解析、`requestBody` schema。
-
-### gRPC 适配器
+**gRPC：**
 
 ```go
 adapter.ImportGRPC(s, grpcConn, adapter.GRPCOptions{
-    Services: []string{"user.UserService", "order.OrderService"},
+    Services: []string{"user.UserService"},
 })
 ```
 
----
-
-## 组件版本化
-
-同一工具注册多个版本，支持渐进式 API 演进：
+### 组件版本化
 
 ```go
-s.ToolFunc("search", "全文搜索", searchV1, gomcp.Version("1.0"))
-s.ToolFunc("search", "语义搜索（向量）", searchV2, gomcp.Version("2.0"))
-
-// 客户端调用：
-//   "search"     → 最新版本（2.0）
-//   "search@1.0" → 指定版本
+s.ToolFunc("search", "v1", searchV1, gomcp.Version("1.0"))
+s.ToolFunc("search", "v2 语义搜索", searchV2, gomcp.Version("2.0"))
+// "search" → 最新版本，"search@1.0" → 指定版本
 ```
 
-标记废弃：
+### 异步任务
 
 ```go
-s.Tool("old_search", "旧版搜索", handler, gomcp.Version("0.9"), gomcp.Deprecated("请使用 search@2.0"))
+s.AsyncTool("report", "生成报告", handler)
+// 客户端立即收到 taskId，通过 tasks/get 轮询，tasks/cancel 取消
 ```
 
----
-
-## 异步任务
-
-适用于耗时较长的操作：
+### 热加载
 
 ```go
-s.AsyncTool("generate_report", "生成分析报告", func(ctx *gomcp.Context) (*gomcp.CallToolResult, error) {
-    data := fetchLargeDataset()
-    report := analyze(data) // 可能需要几分钟
-    return ctx.Text(report.Summary()), nil
-})
+s.LoadDir("./tools/", gomcp.DirOptions{Watch: true})
 ```
 
-客户端立即收到 task ID，然后通过 `tasks/get` 轮询状态，`tasks/cancel` 取消任务。
-
----
-
-## 热加载
-
-从 YAML 文件加载工具定义，文件变更自动重载：
+### MCP Inspector
 
 ```go
-s.LoadDir("./tools/", gomcp.DirOptions{
-    Watch:   true,
-    Pattern: "*.tool.yaml",
-})
+s.Dev(":9090") // http://localhost:9090 — 浏览和测试所有工具
 ```
 
-```yaml
-# tools/search.tool.yaml
-name: search_user
-description: 按名称搜索用户
-version: "1.0"
-params:
-  - name: query
-    type: string
-    required: true
-    description: 搜索关键词
-handler: http://localhost:8080/api/users/search
-method: GET
-```
-
----
-
-## MCP Inspector
-
-内置 Web 调试界面：
-
-```go
-s.Dev(":9090") // 访问 http://localhost:9090
-```
-
-浏览所有注册的工具、资源、Prompt，在线调用并查看响应。
-
----
-
-## 测试
-
-`mcptest` 包提供内存级 MCP 客户端，无需启动传输层即可单元测试：
+### 测试
 
 ```go
 func TestSearch(t *testing.T) {
-    s := setupServer()
-    c := mcptest.NewClient(t, s)
+    c := mcptest.NewClient(t, setupServer())
     c.Initialize()
 
-    // 调用工具
-    result := c.CallTool("search", map[string]any{"query": "golang", "limit": 5})
+    result := c.CallTool("search", map[string]any{"query": "golang"})
     result.AssertNoError(t)
     result.AssertContains(t, "golang")
-
-    // 快照测试
     mcptest.MatchSnapshot(t, "search_result", result)
-
-    // 测试校验
-    bad := c.CallTool("search", map[string]any{"limit": 999})
-    bad.AssertIsError(t)
-    bad.AssertContains(t, "query: required")
 }
 ```
 
----
-
-## 传输层
+### 传输层
 
 ```go
-s.Stdio()          // stdin/stdout — Claude Desktop、Cursor、Kiro 等
-s.HTTP(":8080")    // Streamable HTTP + SSE — 远程部署
-s.Handler()        // http.Handler — 嵌入现有 HTTP 服务
+s.Stdio()          // Claude Desktop、Cursor、Kiro
+s.HTTP(":8080")    // 远程部署，支持 SSE
+s.Handler()        // 嵌入现有 HTTP 服务
 ```
 
-### 配合 Claude Desktop / Cursor / Kiro 使用
-
-在 MCP 客户端配置中添加：
+### 配合 AI 客户端使用
 
 ```json
 {
@@ -438,38 +374,16 @@ s.Handler()        // http.Handler — 嵌入现有 HTTP 服务
 }
 ```
 
----
-
-## 项目结构
-
-```
-gomcp/
-├── server.go              # Server 核心，工具/资源/Prompt 注册
-├── context.go             # 请求上下文，类型化参数访问
-├── group.go               # 工具分组
-├── middleware.go           # 中间件接口和链式执行
-├── middleware_builtin.go   # Logger、Recovery、RequestID、Timeout、RateLimit
-├── middleware_auth.go      # BearerAuth、APIKeyAuth、BasicAuth、RBAC
-├── middleware_otel.go      # OpenTelemetry 追踪
-├── schema/                # struct tag → JSON Schema 生成器 + 校验器
-├── transport/             # stdio + Streamable HTTP
-├── adapter/               # Gin、OpenAPI、gRPC 适配器
-├── mcptest/               # 测试工具包
-├── task.go                # 异步任务
-├── completion.go          # 自动补全
-├── inspector.go           # Web 调试界面
-├── provider.go            # YAML 热加载
-└── examples/              # 可运行的示例
-```
+支持 Claude Desktop、Cursor、Kiro、Windsurf、VS Code Copilot 及所有 MCP 兼容客户端。
 
 ---
 
-## 路线图
+## 📋 路线图
 
 - [x] 核心：Tool、Resource、Prompt，完整 MCP 协议支持
 - [x] struct tag 自动 schema 生成 + 参数校验
 - [x] 中间件链（Logger、Recovery、RateLimit、Timeout、RequestID）
-- [x] 认证中间件（Bearer / API Key / Basic）+ 角色/权限授权
+- [x] 认证中间件（Bearer / API Key / Basic）+ RBAC 授权
 - [x] 工具分组 + 嵌套分组
 - [x] stdio + Streamable HTTP 传输（含 SSE 通知）
 - [x] Gin 适配器——现有 Gin 路由一键转 MCP 工具
@@ -486,10 +400,47 @@ gomcp/
 
 ---
 
-## 贡献
+## 🤝 如何贡献
 
-欢迎提交 Issue 和 Pull Request！
+欢迎各种形式的贡献！
 
-## 许可证
+1. **Fork** 本仓库
+2. **创建** 功能分支（`git checkout -b feature/amazing-feature`）
+3. **提交** 更改（`git commit -m 'feat: add amazing feature'`）
+4. **推送** 分支（`git push origin feature/amazing-feature`）
+5. **发起** Pull Request
 
-[Apache 2.0](LICENSE)
+> 💡 推荐阅读：[《提问的智慧》](https://github.com/ryanhanwu/How-To-Ask-Questions-The-Smart-Way) 和 [《如何向开源社区提问题》](https://github.com/seajs/seajs/issues/545)
+
+---
+
+## ⚖️ 版权与许可
+
+Copyright © 2026 [istarshine](https://gitee.com/rilegouasas)
+
+本项目基于 [Apache License 2.0](LICENSE) 开源。
+
+### 重要说明
+
+1. 本项目 **开源免费**，个人和商业使用均遵循 Apache 2.0 协议。
+2. 使用本项目时，**必须保留** 版权声明和许可证文本。
+3. Apache 2.0 协议包含 **明确的专利授权**——贡献者向用户授予免费的专利使用许可。
+4. 如果您在商业产品中使用本项目，欢迎（但不强制）在文档中注明使用了 GoMCP。
+5. 对本项目的贡献同样遵循 Apache 2.0 协议。
+
+### 专利声明
+
+本框架的部分功能（struct tag schema 生成、HTTP 到 MCP 自动适配、OpenAPI 到 MCP 自动适配）已提交专利申请。Apache 2.0 协议授予您永久的、全球范围的、免版税的专利许可，允许您在使用本软件时使用这些功能。
+
+---
+
+## ⭐ Star
+
+如果 GoMCP 对你有帮助，请给个 Star！这能帮助更多人发现这个项目。
+
+---
+
+## 📬 联系方式
+
+- **Issues**: [GitHub Issues](https://github.com/zhangpanda/gomcp/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/zhangpanda/gomcp/discussions)
