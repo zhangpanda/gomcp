@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"reflect"
+	"strings"
 	"sync"
 
 	"github.com/zhangpanda/gomcp/schema"
@@ -184,7 +185,7 @@ func (s *Server) resolveToolVersion(name string) (toolEntry, bool) {
 	for key, entry := range s.tools {
 		if len(key) > len(prefix) && key[:len(prefix)] == prefix {
 			v := key[len(prefix):]
-			if !found || v > bestVersion {
+			if !found || compareSemver(v, bestVersion) > 0 {
 				best = entry
 				bestVersion = v
 				found = true
@@ -192,6 +193,26 @@ func (s *Server) resolveToolVersion(name string) (toolEntry, bool) {
 		}
 	}
 	return best, found
+}
+
+// compareSemver compares two version strings numerically by splitting on ".".
+// Returns >0 if a > b, <0 if a < b, 0 if equal.
+func compareSemver(a, b string) int {
+	ap := strings.Split(a, ".")
+	bp := strings.Split(b, ".")
+	for i := 0; i < len(ap) || i < len(bp); i++ {
+		var ai, bi int
+		if i < len(ap) {
+			fmt.Sscanf(ap[i], "%d", &ai)
+		}
+		if i < len(bp) {
+			fmt.Sscanf(bp[i], "%d", &bi)
+		}
+		if ai != bi {
+			return ai - bi
+		}
+	}
+	return 0
 }
 
 func toResult(v any) *CallToolResult {
