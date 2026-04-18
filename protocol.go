@@ -109,7 +109,7 @@ type CallToolResult struct {
 // ContentBlock represents a single content item in a tool result.
 type ContentBlock struct {
 	Type     string `json:"type"`
-	Text     string `json:"text,omitempty"`
+	Text     string `json:"text"`
 	Data     string `json:"data,omitempty"`
 	MIMEType string `json:"mimeType,omitempty"`
 }

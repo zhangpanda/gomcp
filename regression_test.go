@@ -269,3 +269,17 @@ func TestRegression_BearerAuthEdgeCases(t *testing.T) {
 		}
 	}
 }
+
+// BUG: ContentBlock.Text had omitempty, empty string was dropped from JSON
+func TestRegression_EmptyStringResult(t *testing.T) {
+	s := gomcp.New("t", "1.0")
+	s.Tool("empty", "empty", func(ctx *gomcp.Context) (*gomcp.CallToolResult, error) {
+		return ctx.Text(""), nil
+	})
+	params, _ := json.Marshal(map[string]any{"name": "empty"})
+	req, _ := json.Marshal(map[string]any{"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": json.RawMessage(params)})
+	resp := s.HandleRaw(context.Background(), req)
+	if !strings.Contains(string(resp), `"text":""`) {
+		t.Errorf("empty string should be preserved in JSON, got: %s", string(resp))
+	}
+}
