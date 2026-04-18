@@ -16,9 +16,10 @@ type CtxKey string
 
 // HTTPServer serves MCP over Streamable HTTP (POST for requests, GET for SSE notifications).
 type HTTPServer struct {
-	handler MessageHandler
-	mu      sync.Mutex
-	clients map[chan []byte]struct{} // SSE client channels
+	handler        MessageHandler
+	mu             sync.Mutex
+	clients        map[chan []byte]struct{} // SSE client channels
+	MaxRequestSize int64                   // 0 means default 10MB
 }
 
 // NewHTTPServer creates a Streamable HTTP transport.
@@ -101,7 +102,11 @@ func (s *HTTPServer) handleSSE(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *HTTPServer) handlePost(w http.ResponseWriter, r *http.Request) {
-	body, err := io.ReadAll(io.LimitReader(r.Body, 10<<20)) // 10MB limit
+	maxSize := s.MaxRequestSize
+	if maxSize <= 0 {
+		maxSize = 10 << 20
+	}
+	body, err := io.ReadAll(io.LimitReader(r.Body, maxSize))
 	if err != nil {
 		http.Error(w, "read error", http.StatusBadRequest)
 		return

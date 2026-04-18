@@ -10,11 +10,12 @@ import (
 
 // Context carries request-scoped data through the handler chain.
 type Context struct {
-	ctx    context.Context
-	args   map[string]any
-	logger *slog.Logger
-	mu     sync.RWMutex
-	store  map[string]any
+	ctx     context.Context
+	args    map[string]any
+	logger  *slog.Logger
+	mu      sync.RWMutex
+	store   map[string]any
+	session *Session
 }
 
 func newContext(ctx context.Context, args map[string]any, logger *slog.Logger) *Context {
@@ -29,6 +30,9 @@ func (c *Context) Context() context.Context { return c.ctx }
 
 // Logger returns a contextual logger.
 func (c *Context) Logger() *slog.Logger { return c.logger }
+
+// Session returns the session associated with this request (nil for stdio without session).
+func (c *Context) Session() *Session { return c.session }
 
 // Set stores a key-value pair in the context.
 func (c *Context) Set(key string, val any) {

@@ -9,6 +9,7 @@ import (
 	"sync"
 
 	"github.com/zhangpanda/gomcp/schema"
+	"github.com/zhangpanda/gomcp/transport"
 )
 
 const protocolVersion = "2024-11-05"
@@ -37,6 +38,8 @@ type Server struct {
 	notifyFn          func(method string, params any) // set by HTTP transport
 	taskMgr           *taskManager
 	completions       []completionEntry
+	sessions          *SessionManager
+	maxRequestSize    int64 // default 10MB
 }
 
 // Option configures the Server.
@@ -48,13 +51,18 @@ func WithDescription(desc string) Option { return func(s *Server) { s.desc = des
 // WithLogger sets a custom logger for the server.
 func WithLogger(l *slog.Logger) Option { return func(s *Server) { s.logger = l } }
 
+// WithMaxRequestSize sets the maximum request body size in bytes (default 10MB).
+func WithMaxRequestSize(n int64) Option { return func(s *Server) { s.maxRequestSize = n } }
+
 // New creates a new MCP Server.
 func New(name, version string, opts ...Option) *Server {
 	s := &Server{
-		name:   name,
-		version: version,
-		tools:  make(map[string]toolEntry),
-		logger: slog.Default(),
+		name:           name,
+		version:        version,
+		tools:          make(map[string]toolEntry),
+		logger:         slog.Default(),
+		sessions:       newSessionManager(),
+		maxRequestSize: 10 << 20, // 10MB
 	}
 	for _, o := range opts {
 		o(s)
@@ -63,6 +71,9 @@ func New(name, version string, opts ...Option) *Server {
 }
 
 func (s *Server) ctx() context.Context { return context.Background() }
+
+// Sessions returns the session manager for inspecting active sessions.
+func (s *Server) Sessions() *SessionManager { return s.sessions }
 
 func (s *Server) notify(method string) {
 	if s.notifyFn != nil {
@@ -294,6 +305,13 @@ func (s *Server) handleToolsCall(ctx context.Context, msg *jsonrpcMessage) *json
 
 	c := newContext(ctx, params.Arguments, s.logger.With("tool", params.Name))
 	c.Set("_tool_name", params.Name)
+
+	// attach session
+	sessionID := ""
+	if headers, ok := ctx.Value(transport.CtxKey("http_headers")).(map[string]string); ok {
+		sessionID = headers["Mcp-Session-Id"]
+	}
+	c.session = s.sessions.GetOrCreate(sessionID)
 
 	var result *CallToolResult
 

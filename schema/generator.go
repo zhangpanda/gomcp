@@ -4,6 +4,7 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
+	"sync"
 )
 
 // Property represents a JSON Schema property.
@@ -26,6 +27,8 @@ type Result struct {
 	Required   []string
 }
 
+var schemaCache sync.Map // reflect.Type → Result
+
 // Generate produces schema properties and required list from a struct type.
 func Generate(t reflect.Type) Result {
 	if t.Kind() == reflect.Ptr {
@@ -33,6 +36,10 @@ func Generate(t reflect.Type) Result {
 	}
 	if t.Kind() != reflect.Struct {
 		return Result{}
+	}
+
+	if cached, ok := schemaCache.Load(t); ok {
+		return cached.(Result)
 	}
 
 	res := Result{Properties: make(map[string]Property)}
@@ -54,6 +61,7 @@ func Generate(t reflect.Type) Result {
 			res.Required = append(res.Required, name)
 		}
 	}
+	schemaCache.Store(t, res)
 	return res
 }
 

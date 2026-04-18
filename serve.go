@@ -24,6 +24,7 @@ func (s *Server) HTTP(addr string) error {
 	defer stop()
 
 	hs := transport.NewHTTPServer(s.rawHandler)
+	hs.MaxRequestSize = s.maxRequestSize
 	s.notifyFn = hs.Notify
 
 	mux := http.NewServeMux()
@@ -34,6 +35,7 @@ func (s *Server) HTTP(addr string) error {
 // Handler returns an http.Handler for embedding in existing HTTP servers.
 func (s *Server) Handler() http.Handler {
 	hs := transport.NewHTTPServer(s.rawHandler)
+	hs.MaxRequestSize = s.maxRequestSize
 	s.notifyFn = hs.Notify
 	return hs
 }
