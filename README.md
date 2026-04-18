@@ -4,6 +4,7 @@
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![Release](https://img.shields.io/badge/Release-v1.0.0-green.svg)](https://github.com/zhangpanda/gomcp/releases)
 [![gomcp MCP server](https://glama.ai/mcp/servers/zhangpanda/gomcp/badges/score.svg)](https://glama.ai/mcp/servers/zhangpanda/gomcp)
+[![SafeSkill 92/100](https://img.shields.io/badge/SafeSkill-92%2F100_Verified%20Safe-brightgreen)](https://safeskill.dev/scan/zhangpanda-gomcp)
 
 **The fast, idiomatic way to build MCP servers in Go.**
 
