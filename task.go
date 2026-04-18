@@ -48,6 +48,16 @@ func (tm *taskManager) submit(toolName string, ctx context.Context, handler func
 	tm.tasks.Store(id, t)
 
 	go func() {
+		// recover panics in async handlers
+		defer func() {
+			if r := recover(); r != nil {
+				t.mu.Lock()
+				t.Status = TaskFailed
+				t.Error = fmt.Sprintf("panic: %v", r)
+				t.mu.Unlock()
+			}
+		}()
+
 		// acquire semaphore
 		select {
 		case tm.sem <- struct{}{}:
