@@ -1,0 +1,17 @@
+#!/bin/sh
+# Prevent force-pushing tags to remote.
+# Go module proxy caches tags — overwriting breaks users.
+
+while read local_ref local_sha remote_ref remote_sha; do
+    if echo "$remote_ref" | grep -q "refs/tags/"; then
+        if [ "$remote_sha" != "0000000000000000000000000000000000000000" ]; then
+            tag=$(echo "$remote_ref" | sed 's|refs/tags/||')
+            echo "ERROR: Tag '$tag' already exists on remote."
+            echo "       Never overwrite published tags. Bump the version instead."
+            echo "       See RELEASE.md for details."
+            exit 1
+        fi
+    fi
+done
+
+exit 0
