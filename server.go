@@ -13,7 +13,7 @@ import (
 	"github.com/zhangpanda/gomcp/transport"
 )
 
-const protocolVersion = "2024-11-05"
+const protocolVersion = "2025-11-25"
 
 // HandlerFunc is the simplest tool handler signature.
 type HandlerFunc func(ctx *Context) (*CallToolResult, error)

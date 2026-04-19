@@ -54,7 +54,7 @@ func newTestServer() *gomcp.Server {
 func TestInitialize(t *testing.T) {
 	c := mcptest.NewClient(t, newTestServer())
 	result := c.Initialize()
-	if result["protocolVersion"] != "2024-11-05" {
+	if result["protocolVersion"] != "2025-11-25" {
 		t.Errorf("unexpected protocol version: %v", result["protocolVersion"])
 	}
 }

@@ -98,7 +98,7 @@ func TestIntegration_HTTP_FullFlow(t *testing.T) {
 
 	// 1. Initialize
 	resp := rpc("initialize", map[string]any{
-		"protocolVersion": "2024-11-05",
+		"protocolVersion": "2025-11-25",
 		"capabilities":    map[string]any{},
 		"clientInfo":      map[string]any{"name": "test", "version": "1.0"},
 	})

@@ -28,7 +28,7 @@ func NewClient(t *testing.T, s *gomcp.Server) *Client {
 func (c *Client) Initialize() map[string]any {
 	c.t.Helper()
 	return c.call("initialize", map[string]any{
-		"protocolVersion": "2024-11-05",
+		"protocolVersion": "2025-11-25",
 		"capabilities":    map[string]any{},
 		"clientInfo":      map[string]any{"name": "mcptest", "version": "1.0"},
 	})

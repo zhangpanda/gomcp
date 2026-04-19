@@ -35,7 +35,7 @@ func newServer() *gomcp.Server {
 func TestClient_Initialize(t *testing.T) {
 	c := NewClient(t, newServer())
 	result := c.Initialize()
-	if result["protocolVersion"] != "2024-11-05" {
+	if result["protocolVersion"] != "2025-11-25" {
 		t.Errorf("unexpected protocol: %v", result["protocolVersion"])
 	}
 }
