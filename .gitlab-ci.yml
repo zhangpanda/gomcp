@@ -1,0 +1,10 @@
+image: golang:1.25
+
+stages:
+  - test
+
+test:
+  stage: test
+  script:
+    - go vet ./...
+    - go test -race -count=1 -timeout 120s ./...
