@@ -18,6 +18,15 @@ const (
 	TaskCancelled = "cancelled"
 )
 
+// asyncTaskIDResult returns a JSON object with taskId for async tool responses.
+func asyncTaskIDResult(id string) *CallToolResult {
+	b, err := json.Marshal(map[string]string{"taskId": id})
+	if err != nil {
+		return TextResult(fmt.Sprintf(`{"taskId":"%s"}`, id))
+	}
+	return TextResult(string(b))
+}
+
 type task struct {
 	mu        sync.Mutex
 	ID        string          `json:"id"`
@@ -124,7 +133,7 @@ func (s *Server) AsyncTool(name, description string, handler HandlerFunc, opts .
 			asyncCtx := newContext(taskCtx, args, logger)
 			return handler(asyncCtx)
 		})
-		return TextResult(fmt.Sprintf(`{"taskId":"%s"}`, id)), nil
+		return asyncTaskIDResult(id), nil
 	}
 	s.Tool(name, description, wrapper, opts...)
 }
@@ -152,7 +161,7 @@ func (s *Server) AsyncToolFunc(name, description string, fn any, opts ...ToolOpt
 					asyncCtx := newContext(taskCtx, args, logger)
 					return original(asyncCtx)
 				})
-				return TextResult(fmt.Sprintf(`{"taskId":"%s"}`, id)), nil
+				return asyncTaskIDResult(id), nil
 			}
 			s.tools[key] = entry
 		}
@@ -167,7 +176,10 @@ func (s *Server) ensureTaskManager() {
 	}
 }
 
-// SetMaxConcurrentTasks sets the max concurrent async tasks.
+// SetMaxConcurrentTasks sets the max concurrent async tasks. Prefer calling
+// this before the first [Server.AsyncTool] or [Server.AsyncToolFunc]. If
+// a task manager already exists, the limiter is replaced; in-flight work is
+// not migrated.
 func (s *Server) SetMaxConcurrentTasks(n int) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

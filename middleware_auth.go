@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"net/http"
 	"strings"
 
 	"github.com/zhangpanda/gomcp/transport"
@@ -39,7 +40,15 @@ func getAuthHeader(ctx *Context) string {
 
 func getHeader(ctx *Context, key string) string {
 	if headers, ok := ctx.ctx.Value(ctxKeyHeaders).(map[string]string); ok {
-		return headers[key]
+		canon := http.CanonicalHeaderKey(key)
+		if v, ok := headers[canon]; ok {
+			return v
+		}
+		for k, v := range headers {
+			if http.CanonicalHeaderKey(k) == canon {
+				return v
+			}
+		}
 	}
 	return ""
 }

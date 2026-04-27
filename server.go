@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"log/slog"
 	"reflect"
+	"sort"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -30,6 +32,7 @@ type Server struct {
 	version           string
 	desc              string
 	tools             map[string]toolEntry
+	versionLatest     map[string]string // unversioned base name → registration key, e.g. "search" → "search@2.0"
 	resources         []resourceEntry
 	resourceTemplates []resourceTemplateEntry
 	prompts           []promptEntry
@@ -58,11 +61,12 @@ func WithMaxRequestSize(n int64) Option { return func(s *Server) { s.maxRequestS
 // New creates a new MCP Server.
 func New(name, version string, opts ...Option) *Server {
 	s := &Server{
-		name:           name,
-		version:        version,
-		tools:          make(map[string]toolEntry),
-		logger:         slog.Default(),
-		sessions:       newSessionManager(),
+		name:          name,
+		version:       version,
+		tools:         make(map[string]toolEntry),
+		versionLatest: make(map[string]string),
+		logger:        slog.Default(),
+		sessions:      newSessionManager(),
 		maxRequestSize: 10 << 20, // 10MB
 	}
 	for _, o := range opts {
@@ -116,6 +120,9 @@ func (s *Server) registerTool(name string, entry toolEntry, opts []ToolOption) {
 	}
 	s.mu.Lock()
 	s.tools[key] = entry
+	if v, ok := entry.info.Annotations["version"]; ok && v != "" {
+		s.bumpVersionLatestLocked(name, v, key)
+	}
 	s.mu.Unlock()
 	s.notify("notifications/tools/list_changed")
 }
@@ -175,9 +182,40 @@ func (s *Server) ToolFunc(name, description string, fn any, opts ...ToolOption) 
 	s.registerTool(name, entry, opts)
 }
 
-// resolveToolVersion finds the latest versioned tool matching a base name.
+// bumpVersionLatestLocked records the latest semver among keys "base@*" for a given base.
+// Must be called with s.mu Lock held (same critical section as mutating s.tools).
+func (s *Server) bumpVersionLatestLocked(base, version, key string) {
+	if s.versionLatest == nil {
+		s.versionLatest = make(map[string]string)
+	}
+	curKey, ok := s.versionLatest[base]
+	if !ok {
+		s.versionLatest[base] = key
+		return
+	}
+	curVer := curKey[len(base)+1:] // part after "base@"
+	if compareSemver(version, curVer) > 0 {
+		s.versionLatest[base] = key
+	}
+}
+
+// resolveToolVersion finds a versioned tool when the exact name is not registered.
 // Must be called with s.mu.RLock held.
 func (s *Server) resolveToolVersion(name string) (toolEntry, bool) {
+	// O(1): only when the client passes an unversioned base (e.g. "search" for search@* family).
+	if !strings.Contains(name, "@") {
+		if key, ok := s.versionLatest[name]; ok {
+			if e, ok2 := s.tools[key]; ok2 {
+				return e, true
+			}
+		}
+	}
+	// O(n) fallback: explicit "base@ver" that is missing, or base names with "@" in the logical name.
+	return s.resolveToolVersionScan(name)
+}
+
+// resolveToolVersionScan is the full-map scan; kept for edge cases and index/tool drift.
+func (s *Server) resolveToolVersionScan(name string) (toolEntry, bool) {
 	prefix := name + "@"
 	var best toolEntry
 	var bestVersion string
@@ -196,23 +234,28 @@ func (s *Server) resolveToolVersion(name string) (toolEntry, bool) {
 }
 
 // compareSemver compares two version strings numerically by splitting on ".".
-// Returns >0 if a > b, <0 if a < b, 0 if equal.
+// Returns >0 if a > b, <0 if a < b, 0 if equal. Non-numeric segments parse as 0.
 func compareSemver(a, b string) int {
 	ap := strings.Split(a, ".")
 	bp := strings.Split(b, ".")
 	for i := 0; i < len(ap) || i < len(bp); i++ {
-		var ai, bi int
-		if i < len(ap) {
-			fmt.Sscanf(ap[i], "%d", &ai)
-		}
-		if i < len(bp) {
-			fmt.Sscanf(bp[i], "%d", &bi)
-		}
+		ai, bi := semverPart(ap, i), semverPart(bp, i)
 		if ai != bi {
 			return ai - bi
 		}
 	}
 	return 0
+}
+
+func semverPart(parts []string, i int) int {
+	if i >= len(parts) {
+		return 0
+	}
+	n, err := strconv.Atoi(strings.TrimSpace(parts[i]))
+	if err != nil {
+		return 0
+	}
+	return n
 }
 
 func toResult(v any) *CallToolResult {
@@ -222,7 +265,10 @@ func toResult(v any) *CallToolResult {
 	case string:
 		return TextResult(val)
 	default:
-		data, _ := json.MarshalIndent(val, "", "  ")
+		data, err := json.MarshalIndent(val, "", "  ")
+		if err != nil {
+			return TextResult(fmt.Sprint(v))
+		}
 		return TextResult(string(data))
 	}
 }
@@ -294,6 +340,7 @@ func (s *Server) handleToolsList(msg *jsonrpcMessage) *jsonrpcMessage {
 	for _, t := range s.tools {
 		tools = append(tools, t.info)
 	}
+	sort.Slice(tools, func(i, j int) bool { return tools[i].Name < tools[j].Name })
 	return newResponse(msg.ID, ToolListResult{Tools: tools})
 }
 
@@ -327,11 +374,8 @@ func (s *Server) handleToolsCall(ctx context.Context, msg *jsonrpcMessage) *json
 	c := newContext(ctx, params.Arguments, s.logger.With("tool", params.Name))
 	c.Set("_tool_name", params.Name)
 
-	// attach session
-	sessionID := ""
-	if headers, ok := ctx.Value(transport.CtxKey("http_headers")).(map[string]string); ok {
-		sessionID = headers["Mcp-Session-Id"]
-	}
+	// attach session (header name matched case-insensitively, like net/http)
+	sessionID := transport.LookupHeader(ctx, "Mcp-Session-Id")
 	c.session = s.sessions.GetOrCreate(sessionID)
 
 	var result *CallToolResult

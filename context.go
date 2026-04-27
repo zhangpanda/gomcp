@@ -94,7 +94,10 @@ func (c *Context) Text(s string) *CallToolResult { return TextResult(s) }
 
 // JSON builds a JSON text result.
 func (c *Context) JSON(v any) *CallToolResult {
-	data, _ := json.MarshalIndent(v, "", "  ")
+	data, err := json.MarshalIndent(v, "", "  ")
+	if err != nil {
+		return TextResult(fmt.Sprint(v))
+	}
 	return TextResult(string(data))
 }
 

@@ -8,6 +8,8 @@ import (
 // New returns a random 8-byte hex string (16 chars).
 func New() string {
 	b := make([]byte, 8)
-	rand.Read(b)
+	if _, err := rand.Read(b); err != nil {
+		panic("uid: crypto/rand: " + err.Error())
+	}
 	return hex.EncodeToString(b)
 }

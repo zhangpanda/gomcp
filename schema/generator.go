@@ -2,6 +2,7 @@ package schema
 
 import (
 	"reflect"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -16,6 +17,7 @@ type Property struct {
 	Minimum     *float64            `json:"minimum,omitempty"`
 	Maximum     *float64            `json:"maximum,omitempty"`
 	Pattern     string              `json:"pattern,omitempty"`
+	PatternRe   *regexp.Regexp      `json:"-"` // from Pattern, used by Validate; not serialized
 	Properties  map[string]Property `json:"properties,omitempty"`
 	Required    []string            `json:"required,omitempty"`
 	Items       *Property           `json:"items,omitempty"`
@@ -61,8 +63,32 @@ func Generate(t reflect.Type) Result {
 			res.Required = append(res.Required, name)
 		}
 	}
+	for k, prop := range res.Properties {
+		initPropertyPattern(&prop)
+		res.Properties[k] = prop
+	}
 	schemaCache.Store(t, res)
 	return res
+}
+
+// initPropertyPattern compiles Pattern into PatternRe and recurses into nested properties.
+func initPropertyPattern(p *Property) {
+	if p == nil {
+		return
+	}
+	p.PatternRe = nil
+	if p.Pattern != "" {
+		if re, err := regexp.Compile(p.Pattern); err == nil {
+			p.PatternRe = re
+		}
+	}
+	for k, sub := range p.Properties {
+		initPropertyPattern(&sub)
+		p.Properties[k] = sub
+	}
+	if p.Items != nil {
+		initPropertyPattern(p.Items)
+	}
 }
 
 func fieldName(f reflect.StructField) string {

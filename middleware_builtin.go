@@ -2,6 +2,7 @@ package gomcp
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -48,22 +49,20 @@ func RequestID() Middleware {
 }
 
 // Timeout returns a middleware that enforces a deadline on tool execution.
-// Handlers should check ctx.Context().Done() to cooperatively cancel long-running work.
+// The request context is replaced with a timeout context; handlers should
+// use [Context.Context] and check [context.Context.Done] to cancel work
+// so long calls return promptly when the deadline hits.
 func Timeout(d time.Duration) Middleware {
 	return func(ctx *Context, next func() error) error {
 		tctx, cancel := context.WithTimeout(ctx.ctx, d)
 		defer cancel()
 		ctx.ctx = tctx
-
-		done := make(chan error, 1)
-		go func() { done <- next() }()
-
-		select {
-		case err := <-done:
-			return err
-		case <-tctx.Done():
+		err := next()
+		// Unwrap to stable message for tool clients (and tests).
+		if err != nil && errors.Is(err, context.DeadlineExceeded) {
 			return fmt.Errorf("tool execution timed out after %s", d)
 		}
+		return err
 	}
 }
 

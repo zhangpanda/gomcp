@@ -50,7 +50,7 @@ func TestIntegration_HTTP_FullFlow(t *testing.T) {
 	srv := &http.Server{}
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
-		t.Fatal(err)
+		t.Skipf("cannot bind local port (HTTP integration needs listen): %v", err)
 	}
 	srv.Handler = mux
 	go srv.Serve(ln)
@@ -141,16 +141,25 @@ func TestIntegration_HTTP_FullFlow(t *testing.T) {
 	}
 
 	// 7. SSE endpoint
-	sseResp, _ := http.Get(base + "/mcp")
+	sseResp, err := http.Get(base + "/mcp")
+	if err != nil {
+		t.Fatalf("SSE GET: %v", err)
+	}
 	if sseResp.Header.Get("Content-Type") != "text/event-stream" {
 		t.Errorf("GET should be SSE: %s", sseResp.Header.Get("Content-Type"))
 	}
 	sseResp.Body.Close()
 
 	// 8. Metrics
-	metricsResp, _ := http.Get(base + "/metrics")
-	metricsBody, _ := io.ReadAll(metricsResp.Body)
+	metricsResp, err := http.Get(base + "/metrics")
+	if err != nil {
+		t.Fatalf("metrics GET: %v", err)
+	}
+	metricsBody, err := io.ReadAll(metricsResp.Body)
 	metricsResp.Body.Close()
+	if err != nil {
+		t.Fatalf("metrics body: %v", err)
+	}
 	if !strings.Contains(string(metricsBody), "gomcp_calls_total") {
 		t.Error("metrics missing gomcp_calls_total")
 	}

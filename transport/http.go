@@ -120,7 +120,7 @@ func (s *HTTPServer) handlePost(w http.ResponseWriter, r *http.Request) {
 	}
 	headers := make(map[string]string)
 	for k := range r.Header {
-		headers[k] = r.Header.Get(k)
+		headers[http.CanonicalHeaderKey(k)] = r.Header.Get(k)
 	}
 	ctx = context.WithValue(ctx, transportCtxKey("http_headers"), headers)
 

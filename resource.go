@@ -2,6 +2,7 @@ package gomcp
 
 import (
 	"encoding/json"
+	"fmt"
 	"regexp"
 	"strings"
 )
@@ -154,30 +155,42 @@ func (s *Server) handleResourcesRead(msg *jsonrpcMessage) *jsonrpcMessage {
 		return newErrorResponse(msg.ID, -32602, "invalid params")
 	}
 
+	var (
+		h      ResourceHandler
+		mime   string
+		uri    string
+		args   map[string]any
+		found  bool
+	)
 	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	// try static resources
+	// static resources
 	for _, r := range s.resources {
 		if r.info.URI == params.URI {
-			return s.execResource(msg, r.handler, r.info.MIMEType, params.URI, nil)
+			h, mime, uri, found = r.handler, r.info.MIMEType, params.URI, true
+			break
 		}
 	}
-
-	// try templates
-	for _, t := range s.resourceTemplates {
-		if matches := t.regex.FindStringSubmatch(params.URI); matches != nil {
-			args := make(map[string]any)
-			for i, name := range t.params {
-				if i+1 < len(matches) {
-					args[name] = matches[i+1]
+	// uri templates
+	if !found {
+		for _, t := range s.resourceTemplates {
+			if matches := t.regex.FindStringSubmatch(params.URI); matches != nil {
+				args = make(map[string]any)
+				for i, name := range t.params {
+					if i+1 < len(matches) {
+						args[name] = matches[i+1]
+					}
 				}
+				h, mime, uri, found = t.handler, t.info.MIMEType, params.URI, true
+				break
 			}
-			return s.execResource(msg, t.handler, t.info.MIMEType, params.URI, args)
 		}
 	}
+	s.mu.RUnlock()
 
-	return newErrorResponse(msg.ID, -32002, "resource not found: "+params.URI)
+	if !found {
+		return newErrorResponse(msg.ID, -32002, "resource not found: "+params.URI)
+	}
+	return s.execResource(msg, h, mime, uri, args)
 }
 
 func (s *Server) execResource(msg *jsonrpcMessage, handler ResourceHandler, mime, uri string, args map[string]any) *jsonrpcMessage {
@@ -192,8 +205,12 @@ func (s *Server) execResource(msg *jsonrpcMessage, handler ResourceHandler, mime
 	case string:
 		text = v
 	default:
-		data, _ := json.MarshalIndent(v, "", "  ")
-		text = string(data)
+		data, err := json.MarshalIndent(v, "", "  ")
+		if err != nil {
+			text = fmt.Sprint(v)
+		} else {
+			text = string(data)
+		}
 	}
 
 	if mime == "" {

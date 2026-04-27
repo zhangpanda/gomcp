@@ -103,8 +103,12 @@ func TestGenerate_Enum(t *testing.T) {
 
 func TestGenerate_Pattern(t *testing.T) {
 	res := Generate(reflect.TypeOf(WithPattern{}))
-	if res.Properties["code"].Pattern != "^[A-Z]{3}$" {
-		t.Errorf("unexpected pattern: %s", res.Properties["code"].Pattern)
+	code := res.Properties["code"]
+	if code.Pattern != "^[A-Z]{3}$" {
+		t.Errorf("unexpected pattern: %s", code.Pattern)
+	}
+	if code.PatternRe == nil || !code.PatternRe.MatchString("ABC") || code.PatternRe.MatchString("abc") {
+		t.Errorf("expected precompiled PatternRe for valid/invalid strings, got PatternRe=%v", code.PatternRe)
 	}
 }
 

@@ -62,37 +62,35 @@ func (m *Metrics) Handler() http.Handler {
 		fmt.Fprintf(w, "gomcp_errors_total %d\n", atomic.LoadInt64(&m.totalErrs))
 
 		m.mu.RLock()
-		tools := make([]string, 0, len(m.toolCalls))
-		for k := range m.toolCalls {
-			tools = append(tools, k)
+		snapshot := make(map[string]*toolMetric, len(m.toolCalls))
+		for k, tm := range m.toolCalls {
+			snapshot[k] = tm
 		}
 		m.mu.RUnlock()
+		tools := make([]string, 0, len(snapshot))
+		for k := range snapshot {
+			tools = append(tools, k)
+		}
 		sort.Strings(tools)
 
 		fmt.Fprintf(w, "# HELP gomcp_tool_calls_total Calls per tool\n")
 		fmt.Fprintf(w, "# TYPE gomcp_tool_calls_total counter\n")
 		for _, name := range tools {
-			m.mu.RLock()
-			tm := m.toolCalls[name]
-			m.mu.RUnlock()
+			tm := snapshot[name]
 			fmt.Fprintf(w, "gomcp_tool_calls_total{tool=%q} %d\n", name, atomic.LoadInt64(&tm.calls))
 		}
 
 		fmt.Fprintf(w, "# HELP gomcp_tool_errors_total Errors per tool\n")
 		fmt.Fprintf(w, "# TYPE gomcp_tool_errors_total counter\n")
 		for _, name := range tools {
-			m.mu.RLock()
-			tm := m.toolCalls[name]
-			m.mu.RUnlock()
+			tm := snapshot[name]
 			fmt.Fprintf(w, "gomcp_tool_errors_total{tool=%q} %d\n", name, atomic.LoadInt64(&tm.errors))
 		}
 
 		fmt.Fprintf(w, "# HELP gomcp_tool_duration_ms_total Total duration per tool in ms\n")
 		fmt.Fprintf(w, "# TYPE gomcp_tool_duration_ms_total counter\n")
 		for _, name := range tools {
-			m.mu.RLock()
-			tm := m.toolCalls[name]
-			m.mu.RUnlock()
+			tm := snapshot[name]
 			fmt.Fprintf(w, "gomcp_tool_duration_ms_total{tool=%q} %d\n", name, atomic.LoadInt64(&tm.totalMs))
 		}
 	})

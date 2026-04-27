@@ -81,9 +81,13 @@ func validateField(name string, val any, prop Property) []FieldError {
 		}
 	}
 
-	// pattern
-	if prop.Pattern != "" {
-		if s, ok := val.(string); ok {
+	// pattern (use PatternRe from [Generate] / [initPropertyPattern] when present)
+	if s, ok := val.(string); ok {
+		if prop.PatternRe != nil {
+			if !prop.PatternRe.MatchString(s) {
+				errs = append(errs, FieldError{Field: name, Message: fmt.Sprintf("must match pattern %s", prop.Pattern)})
+			}
+		} else if prop.Pattern != "" {
 			if matched, _ := regexp.MatchString(prop.Pattern, s); !matched {
 				errs = append(errs, FieldError{Field: name, Message: fmt.Sprintf("must match pattern %s", prop.Pattern)})
 			}
