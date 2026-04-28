@@ -444,6 +444,12 @@ Works with Claude Desktop, Cursor, Kiro, Windsurf, VS Code Copilot, and any MCP-
 
 ---
 
+## 🔒 Security
+
+To report security vulnerabilities, see [SECURITY.md](SECURITY.md).
+
+---
+
 ## ⚖️ Copyright & License
 
 Copyright © 2026 GoMCP Contributors

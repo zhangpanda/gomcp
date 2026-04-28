@@ -410,6 +410,12 @@ s.Handler()        // 嵌入现有 HTTP 服务
 
 ---
 
+## 🔒 安全披露
+
+报告安全漏洞请参阅 [SECURITY.md](SECURITY.md)。
+
+---
+
 ## ⚖️ 版权与许可
 
 Copyright © 2026 GoMCP Contributors

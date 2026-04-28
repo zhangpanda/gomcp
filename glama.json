@@ -2,5 +2,42 @@
   "$schema": "https://glama.ai/mcp/schemas/server.json",
   "maintainers": [
     "zhangpanda"
-  ]
+  ],
+  "name": "gomcp",
+  "description": "Go framework for building Model Context Protocol (MCP) servers: struct-tag schemas, middleware, Gin/OpenAPI/gRPC adapters, stdio and Streamable HTTP. The published Glama entry references the stdio demo in examples/basic.",
+  "type": "mcp_server",
+  "status": "production",
+  "framework": "GoMCP (Go 1.25+)",
+  "tools": 5,
+  "transport": [
+    "stdio",
+    "http"
+  ],
+  "keywords": [
+    "go",
+    "golang",
+    "mcp",
+    "model-context-protocol",
+    "framework",
+    "gin",
+    "openapi",
+    "grpc",
+    "tools",
+    "stdio",
+    "sse"
+  ],
+  "features": {
+    "stdio_transport": {
+      "enabled": true,
+      "note": "Claude Desktop, Cursor, and other MCP clients via command"
+    },
+    "streamable_http": {
+      "enabled": true,
+      "note": "Remote deployment with SSE notifications (Server.HTTP / Handler)"
+    },
+    "adapters": {
+      "enabled": true,
+      "note": "Import existing Gin routes, OpenAPI specs, or gRPC services as tools"
+    }
+  }
 }
