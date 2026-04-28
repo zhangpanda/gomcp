@@ -149,7 +149,6 @@ func callHTTPHandler(url, method string, ctx *Context) (*CallToolResult, error) 
 
 func (s *Server) watchDir(dir string, opts DirOptions) {
 	// simple polling watcher — tracks file mod times
-	modTimes := make(map[string]time.Time)
 	snapshot := func() map[string]time.Time {
 		m := make(map[string]time.Time)
 		matches, _ := filepath.Glob(filepath.Join(dir, opts.Pattern))
@@ -160,7 +159,7 @@ func (s *Server) watchDir(dir string, opts DirOptions) {
 		}
 		return m
 	}
-	modTimes = snapshot()
+	modTimes := snapshot()
 
 	ticker := time.NewTicker(opts.Interval)
 	defer ticker.Stop()
