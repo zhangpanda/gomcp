@@ -1,17 +1,29 @@
 {
   "$schema": "https://glama.ai/mcp/schemas/server.json",
+  "name": "gomcp",
+  "display_name": "GoMCP",
+  "description": "Go framework for building Model Context Protocol (MCP) servers: struct-tag schemas, middleware, Gin/OpenAPI/gRPC adapters, stdio and Streamable HTTP. The published Glama entry references the stdio demo in examples/basic.",
+  "repository": "https://github.com/zhangpanda/gomcp",
+  "homepage": "https://github.com/zhangpanda/gomcp",
+  "license": "Apache-2.0",
   "maintainers": [
     "zhangpanda"
   ],
-  "name": "gomcp",
-  "description": "Go framework for building Model Context Protocol (MCP) servers: struct-tag schemas, middleware, Gin/OpenAPI/gRPC adapters, stdio and Streamable HTTP. The published Glama entry references the stdio demo in examples/basic.",
+  "author": {
+    "name": "zhangpanda",
+    "url": "https://github.com/zhangpanda"
+  },
   "type": "mcp_server",
   "status": "production",
   "framework": "GoMCP (Go 1.25+)",
-  "tools": 5,
   "transport": [
     "stdio",
     "http"
+  ],
+  "categories": [
+    "developer-tools",
+    "framework",
+    "infrastructure"
   ],
   "keywords": [
     "go",
@@ -26,6 +38,35 @@
     "stdio",
     "sse"
   ],
+  "tools": [
+    {
+      "name": "greet_user",
+      "description": "Greet a user by name with a personalized greeting message"
+    },
+    {
+      "name": "search_documents",
+      "description": "Search documents by keyword using full-text matching"
+    },
+    {
+      "name": "search_semantic",
+      "description": "Search documents using semantic embedding-based matching"
+    },
+    {
+      "name": "generate_report",
+      "description": "Generate an analytics report asynchronously for a given topic"
+    },
+    {
+      "name": "get_config",
+      "description": "Retrieve the current server configuration"
+    }
+  ],
+  "resources": [
+    "config://app - App configuration",
+    "users://{id}/profile - User profile by ID"
+  ],
+  "prompts": [
+    "code_review - Code review assistant with language selection"
+  ],
   "features": {
     "stdio_transport": {
       "enabled": true,
@@ -39,5 +80,9 @@
       "enabled": true,
       "note": "Import existing Gin routes, OpenAPI specs, or gRPC services as tools"
     }
-  }
+  },
+  "related_servers": [
+    "modelcontextprotocol/servers",
+    "mark3labs/mcp-go"
+  ]
 }

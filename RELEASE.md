@@ -36,4 +36,6 @@ git push github main --tags
 
 ## Current Version
 
+- v1.2.0 — security, maintenance, and metadata improvements
+- v1.1.0 — performance, reliability, tests, and repo hygiene
 - v1.0.0 — initial stable release
