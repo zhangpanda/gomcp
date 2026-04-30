@@ -180,7 +180,10 @@ func (s *Server) ToolFunc(name, description string, fn any, opts ...ToolOption) 
 		}
 		results := fv.Call([]reflect.Value{reflect.ValueOf(ctx), inPtr.Elem()})
 		if errVal := results[1]; !errVal.IsNil() {
-			return nil, errVal.Interface().(error)
+			if err, ok := errVal.Interface().(error); ok {
+				return nil, err
+			}
+			return nil, fmt.Errorf("%v", errVal.Interface())
 		}
 		return toResult(results[0].Interface()), nil
 	}
@@ -411,11 +414,15 @@ func (s *Server) handleToolsCall(ctx context.Context, msg *jsonrpcMessage) *json
 
 	// panic recovered → friendly error result
 	if panicMsg, ok := c.Get("_panic"); ok {
-		return newResponse(msg.ID, ErrorResult(panicMsg.(string)))
+		if s, ok := panicMsg.(string); ok {
+			return newResponse(msg.ID, ErrorResult(s))
+		}
 	}
 
 	if errMsg, ok := c.Get("_chain_error"); ok {
-		return newResponse(msg.ID, ErrorResult(errMsg.(string)))
+		if s, ok := errMsg.(string); ok {
+			return newResponse(msg.ID, ErrorResult(s))
+		}
 	}
 	if result == nil {
 		result = &CallToolResult{}

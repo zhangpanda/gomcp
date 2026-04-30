@@ -28,7 +28,7 @@ type PromptArgument struct {
 
 // PromptMessage is a single message in a prompt response.
 type PromptMessage struct {
-	Role    string       `json:"role"`
+	Role    string        `json:"role"`
 	Content PromptContent `json:"content"`
 }
 

@@ -135,7 +135,9 @@ func (c *Client) call(method string, params any) map[string]any {
 	}
 
 	var result map[string]any
-	json.Unmarshal(msg.Result, &result)
+	if err := json.Unmarshal(msg.Result, &result); err != nil {
+		c.t.Fatalf("mcptest: unmarshal result: %v", err)
+	}
 	return result
 }
 
@@ -186,8 +188,12 @@ func MatchSnapshot(t *testing.T, name string, result *ToolResult) {
 	actual := result.Text()
 
 	if _, err := os.Stat(file); os.IsNotExist(err) || os.Getenv("UPDATE_SNAPSHOTS") == "1" {
-		os.MkdirAll(dir, 0o755)
-		os.WriteFile(file, []byte(actual), 0o644)
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatalf("create snapshot dir: %v", err)
+		}
+		if err := os.WriteFile(file, []byte(actual), 0o644); err != nil {
+			t.Fatalf("write snapshot %q: %v", file, err)
+		}
 		t.Logf("snapshot %q written", file)
 		return
 	}

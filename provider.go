@@ -153,7 +153,7 @@ func callHTTPHandler(url, method string, ctx *Context) (*CallToolResult, error) 
 	if err != nil {
 		return ErrorResult("http error: " + err.Error()), nil
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	body, _ := io.ReadAll(resp.Body)
 
 	if resp.StatusCode >= 400 {

@@ -2,12 +2,10 @@ package adapter
 
 import (
 	"bytes"
-	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -88,9 +86,9 @@ func callGinRoute(engine *gin.Engine, method, path string, pathParams []string, 
 		bodyReader = bytes.NewBufferString(bodyStr)
 	}
 
-	req, err := http.NewRequest(method, actualPath, bodyReader)
+	req, err := http.NewRequestWithContext(ctx.Context(), method, actualPath, bodyReader)
 	if err != nil {
-		return gomcp.ErrorResult("failed to create request: " + err.Error()), nil
+		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 	if bodyReader != nil {
 		req.Header.Set("Content-Type", "application/json")
@@ -163,20 +161,4 @@ func matchPrefix(path, pattern string) bool {
 	return strings.HasPrefix(path, pattern)
 }
 
-// Helpers for URL encoding
-func encodeQuery(params map[string]string) string {
-	v := url.Values{}
-	for k, val := range params {
-		v.Set(k, val)
-	}
-	return v.Encode()
-}
 
-// Ensure JSON is pretty for readability
-func prettyJSON(data []byte) string {
-	var buf bytes.Buffer
-	if err := json.Indent(&buf, data, "", "  "); err != nil {
-		return string(data)
-	}
-	return buf.String()
-}

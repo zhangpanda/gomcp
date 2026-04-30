@@ -8,7 +8,7 @@ import (
 
 	"github.com/zhangpanda/gomcp"
 	"google.golang.org/grpc"
-	rpb "google.golang.org/grpc/reflection/grpc_reflection_v1alpha"
+	rpb "google.golang.org/grpc/reflection/grpc_reflection_v1alpha" //nolint:staticcheck // migrating to v1 reflection API is a separate task
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protodesc"
@@ -25,7 +25,7 @@ type GRPCOptions struct {
 
 // ImportGRPC discovers gRPC services via server reflection and registers each
 // unary method as an MCP tool. Streaming methods are skipped.
-func ImportGRPC(s *gomcp.Server, conn *grpc.ClientConn, opts GRPCOptions) error {
+func ImportGRPC(s *gomcp.Server, conn *grpc.ClientConn, opts GRPCOptions) error { //nolint:staticcheck // uses deprecated grpc_reflection_v1alpha
 	ctx := context.Background()
 	client := rpb.NewServerReflectionClient(conn)
 	stream, err := client.ServerReflectionInfo(ctx)
@@ -154,13 +154,13 @@ func callGRPCMethod(conn *grpc.ClientConn, fullMethod string, inputDesc, outputD
 	reqMsg := dynamicpb.NewMessage(inputDesc)
 	argsJSON, _ := json.Marshal(ctx.Args())
 	if err := protojson.Unmarshal(argsJSON, reqMsg); err != nil {
-		return gomcp.ErrorResult("invalid params: " + err.Error()), nil
+		return nil, fmt.Errorf("invalid params: %w", err)
 	}
 
 	respMsg := dynamicpb.NewMessage(outputDesc)
 	err := conn.Invoke(ctx.Context(), fullMethod, reqMsg, respMsg)
 	if err != nil {
-		return gomcp.ErrorResult("gRPC error: " + err.Error()), nil
+		return nil, fmt.Errorf("gRPC error: %w", err)
 	}
 
 	respJSON, _ := protojson.Marshal(respMsg)

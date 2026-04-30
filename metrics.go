@@ -18,9 +18,9 @@ type Metrics struct {
 }
 
 type toolMetric struct {
-	calls    int64
-	errors   int64
-	totalMs  int64 // total duration in milliseconds
+	calls   int64
+	errors  int64
+	totalMs int64 // total duration in milliseconds
 }
 
 func newMetrics() *Metrics {

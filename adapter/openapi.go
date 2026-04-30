@@ -121,7 +121,7 @@ func callOpenAPI(baseURL, method, path string, op openAPIOperation, spec *openAP
 		}
 	}
 
-	req, err := http.NewRequest(strings.ToUpper(method), fullURL, bodyReader)
+	req, err := http.NewRequestWithContext(ctx.Context(), strings.ToUpper(method), fullURL, bodyReader)
 	if err != nil {
 		return gomcp.ErrorResult("request error: " + err.Error()), nil
 	}
@@ -184,9 +184,7 @@ func buildOpSchema(op openAPIOperation, method string, spec *openAPISpec) gomcp.
 				}
 				props[name] = prop
 			}
-			for _, r := range bodySchema.Required {
-				required = append(required, r)
-			}
+			required = append(required, bodySchema.Required...)
 		} else {
 			// fallback: raw body string
 			props["body"] = gomcp.JSONSchema{Type: "string", Description: "JSON request body"}

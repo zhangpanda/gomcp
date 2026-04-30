@@ -93,7 +93,7 @@ func (s *HTTPServer) handleSSE(w http.ResponseWriter, r *http.Request) {
 	for {
 		select {
 		case event := <-ch:
-			w.Write(event)
+			_, _ = w.Write(event)
 			flusher.Flush()
 		case <-r.Context().Done():
 			return
@@ -111,7 +111,7 @@ func (s *HTTPServer) handlePost(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "read error", http.StatusBadRequest)
 		return
 	}
-	r.Body.Close()
+	_ = r.Body.Close()
 	if int64(len(body)) > maxSize {
 		http.Error(w, "request too large", http.StatusRequestEntityTooLarge)
 		return
@@ -146,9 +146,9 @@ func (s *HTTPServer) handlePost(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	if isBatch {
 		batch, _ := json.Marshal(responses)
-		w.Write(batch)
+		_, _ = w.Write(batch)
 	} else {
-		w.Write(responses[0])
+		_, _ = w.Write(responses[0])
 	}
 }
 

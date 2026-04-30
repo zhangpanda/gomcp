@@ -17,10 +17,26 @@ linters:
     - noctx           # http requests without context
     - forcetypeassert # bare type assertions without ok check
     - musttag         # struct tags enforcement
+  settings:
+    errcheck:
+      exclude-functions:
+        - (fmt.Fprint)
+        - (fmt.Fprintf)
+        - (fmt.Fprintln)
+        - (*encoding/json.Encoder).Encode
+        - (io.Writer).Write
+        - (net/http.ResponseWriter).Write
   exclusions:
     paths:
       - docs
       - examples
+    rules:
+      - path: _test\.go
+        linters:
+          - errcheck
+          - noctx
+          - bodyclose
+          - forcetypeassert
 
 formatters:
   enable:

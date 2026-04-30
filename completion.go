@@ -6,10 +6,10 @@ import "encoding/json"
 type CompletionHandler func(partial string) []string
 
 type completionEntry struct {
-	refType  string // "ref/prompt" or "ref/resource"
-	refName  string
-	argName  string
-	handler  CompletionHandler
+	refType string // "ref/prompt" or "ref/resource"
+	refName string
+	argName string
+	handler CompletionHandler
 }
 
 // Completion registers an auto-complete handler for a prompt or resource argument.
