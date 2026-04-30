@@ -44,7 +44,7 @@ type Server struct {
 	taskMgr           *taskManager
 	completions       []completionEntry
 	sessions          *SessionManager
-	maxRequestSize    int64 // default 10MB
+	maxRequestSize    int64                     // default 10MB
 	sseValidate       func(*http.Request) error // optional SSE (GET) gate for Streamable HTTP
 }
 

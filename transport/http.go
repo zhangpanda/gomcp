@@ -19,7 +19,7 @@ type HTTPServer struct {
 	handler        MessageHandler
 	mu             sync.Mutex
 	clients        map[chan []byte]struct{} // SSE client channels
-	MaxRequestSize int64                   // 0 means default 10MB
+	MaxRequestSize int64                    // 0 means default 10MB
 	// ValidateSSE is invoked before subscribing an SSE client; return non-nil to reject with 401.
 	ValidateSSE func(*http.Request) error
 }
