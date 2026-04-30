@@ -36,7 +36,7 @@ MCP is the open protocol that lets AI applications (Claude Desktop, Cursor, Kiro
 | Import Gin routes | No | No | **✅ One line** |
 | Import OpenAPI/Swagger | No | No | **✅ One line** |
 | Import gRPC services | No | No | **✅** |
-| Built-in auth | No | No | **Bearer, API Key, Basic + RBAC** |
+| Built-in auth | No | No | **Bearer / API Key / Basic + RBAC** (Bearer = your token/JWT validator) |
 | Inspector UI | No | No | **✅** |
 | Test utilities | Basic | No | **mcptest package** |
 
@@ -81,7 +81,7 @@ MCP is the open protocol that lets AI applications (Claude Desktop, Cursor, Kiro
 
 ### 🔐 Security
 
-- **BearerAuth** — JWT token validation
+- **BearerAuth** — Bearer token check via your validator (JWT parsing is up to you; this library does not decode JWTs)
 - **APIKeyAuth** — API key validation via header
 - **BasicAuth** — HTTP Basic authentication
 - **RequireRole / RequirePermission** — RBAC authorization on tool groups
@@ -131,12 +131,12 @@ gomcp/
 ├── server.go              # Server core, tool/resource/prompt registration
 ├── context.go             # Request context with typed accessors
 ├── group.go               # Tool groups with prefix naming
-├── middleware.go           # Middleware interface and chain execution
+├── middleware.go           # Middleware、HandshakeAuthSkipMethods、[SkipAuthForMCPMethods]
 ├── middleware_builtin.go   # Logger, Recovery, RequestID, Timeout, RateLimit
 ├── middleware_auth.go      # BearerAuth, APIKeyAuth, BasicAuth, RBAC
 ├── middleware_otel.go      # OpenTelemetry tracing
 ├── schema/                # struct tag → JSON Schema generator + validator
-├── transport/             # stdio + Streamable HTTP
+├── transport/             # stdio + Streamable HTTP + optional CORS helper
 ├── adapter/               # Gin, OpenAPI, gRPC adapters
 ├── mcptest/               # Testing utilities
 ├── task.go                # Async task support
@@ -288,8 +288,9 @@ s.Use(gomcp.RequestID())                           // Unique request ID
 s.Use(gomcp.Timeout(10 * time.Second))             // Deadline enforcement
 s.Use(gomcp.RateLimit(100))                        // 100 calls/minute
 s.Use(gomcp.OpenTelemetry())                       // Distributed tracing
-s.Use(gomcp.BearerAuth(tokenValidator))            // JWT auth
-s.Use(gomcp.APIKeyAuth("X-API-Key", keyValidator)) // API key auth
+// Pick one: BearerAuth (token required on initialize too) or BearerAuthSkipHandshake (initialize/ping anonymous).
+s.Use(gomcp.BearerAuthSkipHandshake(tokenValidator))
+s.Use(gomcp.APIKeyAuthSkipHandshake("X-API-Key", keyValidator))
 ```
 
 **Custom middleware:**
@@ -395,6 +396,7 @@ func TestSearch(t *testing.T) {
 s.Stdio()          // Claude Desktop, Cursor, Kiro
 s.HTTP(":8080")    // Remote deployment with SSE
 s.Handler()        // Embed in existing HTTP server
+// Browser clients: wrap the handler with transport.WrapCORS(h, []string{"https://your.app"}) when needed
 ```
 
 ### Use with AI Clients
@@ -448,9 +450,11 @@ Works with Claude Desktop, Cursor, Kiro, Windsurf, VS Code Copilot, and any MCP-
 
 ### HTTP transport and authentication
 
-- **`Use` middleware runs for every JSON-RPC method** (except the notification `notifications/initialized`, which has no response): `initialize`, `tools/list`, `tools/call`, `resources/read`, `prompts/get`, `tasks/*`, `completion/complete`, etc. Use `BearerAuth` / `APIKeyAuth` / `BasicAuth` when exposing **`POST /mcp`**. For **`APIKeyAuth`**, the `api_key` tool argument is merged into the middleware view for **`tools/call`** so header-less clients can still authenticate the same way as before.
+- **`Use` middleware runs for every JSON-RPC method** (except the notification `notifications/initialized`, which has no response): `initialize`, `tools/list`, `tools/call`, `resources/read`, `prompts/get`, `tasks/*`, `completion/complete`, etc. Use `BearerAuth` / `APIKeyAuth` / `BasicAuth` when exposing **`POST /mcp`**. For **`APIKeyAuth`**, `api_key` (and other merged params) come from **`tools/call` arguments**, **`prompts/get` arguments**, or **`resources/read` params** JSON when no header is sent—prefer headers for production.
+- **`BearerAuthSkipHandshake` / `APIKeyAuthSkipHandshake` / `BasicAuthSkipHandshake`** (or `SkipAuthForMCPMethods`) let `initialize` and `ping` run without credentials while keeping other methods protected—typical for MCP HTTP clients that negotiate before sending tokens.
 - **Request context propagates** into tool, resource, and prompt handlers (deadlines, `Authorization`, and injected headers from Streamable HTTP).
-- **SSE (`GET /mcp`)** does not execute MCP middleware. To require the same Bearer token as JSON-RPC, register **`gomcp.WithSSEAuth(gomcp.SSEBearerAuth(validator))`** (or your own gate). Without `WithSSEAuth`, any client that can open `GET` receives broadcast notifications.
+- **SSE (`GET /mcp`)** does not execute MCP middleware. Use **`WithSSEAuth`** with **`SSEBearerAuth`**, **`SSEAPIKeyAuth`**, **`SSEBasicAuth`**, or your own gate. Without `WithSSEAuth`, any client that can open `GET` receives broadcast notifications.
+- **Browser `fetch`**: wrap your `/mcp` handler with **`transport.WrapCORS(h, allowedOrigins)`** from `github.com/zhangpanda/gomcp/transport`; never use `*` with credentials—only list trusted origins.
 
 When deploying Streamable HTTP in production, combine TLS, authentication middleware on `POST`, and **`WithSSEAuth`** when notifications must not be public.
 

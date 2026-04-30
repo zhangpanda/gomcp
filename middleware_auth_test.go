@@ -62,6 +62,58 @@ func validTokenValidator(token string) (map[string]any, error) {
 	return nil, fmt.Errorf("invalid token")
 }
 
+func TestBearerAuthSkipHandshake_AllowsInitializeWithoutToken(t *testing.T) {
+	s := gomcp.New("test", "1.0")
+	s.Use(gomcp.BearerAuthSkipHandshake(validTokenValidator))
+
+	initReq, _ := json.Marshal(map[string]any{
+		"jsonrpc": "2.0", "id": 1, "method": "initialize",
+		"params": map[string]any{
+			"protocolVersion": "2025-11-25",
+			"capabilities":    map[string]any{},
+			"clientInfo":      map[string]any{"name": "t", "version": "1"},
+		},
+	})
+	resp := s.HandleRaw(context.Background(), initReq)
+	if !strings.Contains(string(resp), `"protocolVersion"`) {
+		t.Fatalf("initialize should succeed: %s", string(resp))
+	}
+
+	s.Tool("ping", "ping", func(ctx *gomcp.Context) (*gomcp.CallToolResult, error) {
+		return ctx.Text("ok"), nil
+	})
+	params, _ := json.Marshal(map[string]any{"name": "ping", "arguments": map[string]any{}})
+	callReq, _ := json.Marshal(map[string]any{"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": json.RawMessage(params)})
+	resp = s.HandleRaw(context.Background(), callReq)
+	if !strings.Contains(string(resp), "missing") && !strings.Contains(string(resp), "invalid Bearer") {
+		t.Fatalf("tools/call without token should fail: %s", string(resp))
+	}
+
+	ctx := ctxWithAuth("Bearer", "valid-token")
+	resp = s.HandleRaw(ctx, callReq)
+	var msg struct {
+		Result *struct {
+			Content []struct{ Text string } `json:"content"`
+			IsError bool                    `json:"isError"`
+		} `json:"result"`
+	}
+	json.Unmarshal(resp, &msg)
+	if msg.Result == nil || msg.Result.IsError || len(msg.Result.Content) == 0 || msg.Result.Content[0].Text != "ok" {
+		t.Fatalf("tools/call with token should succeed: %s", string(resp))
+	}
+}
+
+func TestSkipAuthForMCPMethods_Custom(t *testing.T) {
+	s := gomcp.New("test", "1.0")
+	s.Use(gomcp.SkipAuthForMCPMethods([]string{"ping"}, gomcp.BearerAuth(validTokenValidator)))
+
+	pingReq, _ := json.Marshal(map[string]any{"jsonrpc": "2.0", "id": 1, "method": "ping"})
+	resp := s.HandleRaw(context.Background(), pingReq)
+	if !strings.Contains(string(resp), `"result"`) {
+		t.Fatalf("ping should bypass auth: %s", string(resp))
+	}
+}
+
 func TestBearerAuth_Valid(t *testing.T) {
 	s := gomcp.New("test", "1.0")
 	s.Use(gomcp.BearerAuth(validTokenValidator))

@@ -36,7 +36,7 @@ MCP 是 Anthropic 发布的开放协议，让 AI 应用（Claude Desktop、Curso
 | 导入 Gin 路由 | 无 | 无 | **✅ 一行代码** |
 | 导入 OpenAPI/Swagger | 无 | 无 | **✅ 一行代码** |
 | 导入 gRPC 服务 | 无 | 无 | **✅** |
-| 内置认证 | 无 | 无 | **Bearer、API Key、Basic + RBAC** |
+| 内置认证 | 无 | 无 | **Bearer / API Key / Basic + RBAC**（Bearer 由你在回调里校验 token/JWT） |
 | 调试界面 | 无 | 无 | **✅** |
 | 测试工具 | 基础 | 无 | **mcptest 包** |
 
@@ -81,7 +81,7 @@ MCP 是 Anthropic 发布的开放协议，让 AI 应用（Claude Desktop、Curso
 
 ### 🔐 安全
 
-- **BearerAuth** — JWT Token 验证
+- **BearerAuth** — 由你的校验函数验证 Bearer token（JWT 解析需自行实现；本库不解码 JWT）
 - **APIKeyAuth** — 通过 Header 验证 API Key
 - **BasicAuth** — HTTP Basic 认证
 - **RequireRole / RequirePermission** — 基于角色/权限的授权控制
@@ -131,12 +131,12 @@ gomcp/
 ├── server.go              # Server 核心，工具/资源/Prompt 注册
 ├── context.go             # 请求上下文，类型化参数访问
 ├── group.go               # 工具分组
-├── middleware.go           # 中间件接口和链式执行
+├── middleware.go           # 中间件、HandshakeAuthSkipMethods、SkipAuthForMCPMethods
 ├── middleware_builtin.go   # Logger、Recovery、RequestID、Timeout、RateLimit
 ├── middleware_auth.go      # BearerAuth、APIKeyAuth、BasicAuth、RBAC
 ├── middleware_otel.go      # OpenTelemetry 追踪
 ├── schema/                # struct tag → JSON Schema 生成器 + 校验器
-├── transport/             # stdio + Streamable HTTP
+├── transport/             # stdio + Streamable HTTP + 可选 CORS 封装
 ├── adapter/               # Gin、OpenAPI、gRPC 适配器
 ├── mcptest/               # 测试工具包
 ├── task.go                # 异步任务
@@ -273,7 +273,9 @@ s.Use(gomcp.RequestID())                           // 唯一请求 ID
 s.Use(gomcp.Timeout(10 * time.Second))             // 超时控制
 s.Use(gomcp.RateLimit(100))                        // 100 次/分钟限流
 s.Use(gomcp.OpenTelemetry())                       // 分布式追踪
-s.Use(gomcp.BearerAuth(tokenValidator))            // JWT 认证
+// 二选一：BearerAuth（initialize 也需凭证）或 BearerAuthSkipHandshake（initialize/ping 可匿名）
+s.Use(gomcp.BearerAuthSkipHandshake(tokenValidator))
+s.Use(gomcp.APIKeyAuthSkipHandshake("X-API-Key", keyValidator))
 ```
 
 ### 工具分组
@@ -361,6 +363,7 @@ func TestSearch(t *testing.T) {
 s.Stdio()          // Claude Desktop、Cursor、Kiro
 s.HTTP(":8080")    // 远程部署，支持 SSE
 s.Handler()        // 嵌入现有 HTTP 服务
+// 浏览器 fetch：需要时用 transport.WrapCORS(h, []string{"https://你的前端域"})
 ```
 
 ### 配合 AI 客户端使用
@@ -414,9 +417,11 @@ s.Handler()        // 嵌入现有 HTTP 服务
 
 ### HTTP 传输与认证
 
-- **`Use` 注册的中间件会对几乎所有 JSON-RPC 方法生效**（除仅通知、无响应体的 `notifications/initialized`）：包括 `initialize`、`tools/list`、`tools/call`、`resources/read`、`prompts/get`、`tasks/*`、`completion/complete` 等。对外暴露 **`POST /mcp`** 时应配合 `BearerAuth` / `APIKeyAuth` / `BasicAuth`。**`APIKeyAuth`** 会将 **`tools/call` 的 `arguments`** 中的键合并进中间件可见的参数（例如工具参数里的 `api_key`），以便在无自定义 Header 时仍能认证。
+- **`Use` 注册的中间件会对几乎所有 JSON-RPC 方法生效**（除仅通知、无响应体的 `notifications/initialized`）：包括 `initialize`、`tools/list`、`tools/call`、`resources/read`、`prompts/get`、`tasks/*`、`completion/complete` 等。对外暴露 **`POST /mcp`** 时应配合 `BearerAuth` / `APIKeyAuth` / `BasicAuth`。**`APIKeyAuth`** 会把 **`tools/call` arguments**、**`prompts/get` arguments** 或 **`resources/read` params** JSON 里的键（含 `api_key`）合并给中间件读取——生产环境仍建议优先用 Header。
+- **`BearerAuthSkipHandshake` / `APIKeyAuthSkipHandshake` / `BasicAuthSkipHandshake`**（或 `SkipAuthForMCPMethods`）允许 **`HandshakeAuthSkipMethods` 返回的方法**（默认 `initialize`、`ping`）免凭证，其余请求仍受保护，适合「先握手再带 token」的 HTTP 客户端。
 - **请求的 `context.Context` 会传递到工具、资源与 Prompt 的 handler**（截止时间、`Authorization`、Streamable HTTP 注入的头等）。
-- **SSE（`GET /mcp`）不会走 MCP 中间件链**。若需与 JSON-RPC 相同的 Bearer 校验，请配置 **`gomcp.WithSSEAuth(gomcp.SSEBearerAuth(validator))`**（或自定义校验函数）。未配置时，能访问 `GET` 的客户端可订阅广播通知。
+- **SSE（`GET /mcp`）不会走 MCP 中间件链**。请用 **`WithSSEAuth`**，可选用 **`SSEBearerAuth`**、**`SSEAPIKeyAuth`**、**`SSEBasicAuth`** 或自定义校验。未配置时，能访问 `GET` 的客户端可订阅广播通知。
+- **浏览器跨域**：使用 `github.com/zhangpanda/gomcp/transport` 的 **`WrapCORS(h, allowedOrigins)`** 包裹 `/mcp` Handler；带凭证时不要使用 `*`，只列出可信 Origin。
 
 生产环境部署 Streamable HTTP 时，建议同时使用 TLS、`POST` 侧认证中间件，以及在通知内容敏感时启用 **`WithSSEAuth`**。
 

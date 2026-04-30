@@ -303,18 +303,36 @@ func (s *Server) HandleRaw(ctx context.Context, raw json.RawMessage) json.RawMes
 // mergedArgsForMiddleware exposes JSON-RPC params to global middleware before dispatch so values
 // like tools/call "arguments" can inform auth (e.g. [APIKeyAuth] reading api_key without a header).
 func mergedArgsForMiddleware(msg *jsonrpcMessage) map[string]any {
-	if msg.Method != "tools/call" {
+	switch msg.Method {
+	case "tools/call":
+		var params CallToolParams
+		if err := json.Unmarshal(msg.Params, &params); err != nil || params.Arguments == nil {
+			return nil
+		}
+		out := make(map[string]any, len(params.Arguments))
+		for k, v := range params.Arguments {
+			out[k] = v
+		}
+		return out
+	case "prompts/get":
+		var params GetPromptParams
+		if err := json.Unmarshal(msg.Params, &params); err != nil || len(params.Arguments) == 0 {
+			return nil
+		}
+		out := make(map[string]any, len(params.Arguments))
+		for k, v := range params.Arguments {
+			out[k] = v
+		}
+		return out
+	case "resources/read":
+		var m map[string]any
+		if err := json.Unmarshal(msg.Params, &m); err != nil || len(m) == 0 {
+			return nil
+		}
+		return m
+	default:
 		return nil
 	}
-	var params CallToolParams
-	if err := json.Unmarshal(msg.Params, &params); err != nil || params.Arguments == nil {
-		return nil
-	}
-	out := make(map[string]any, len(params.Arguments))
-	for k, v := range params.Arguments {
-		out[k] = v
-	}
-	return out
 }
 
 func (s *Server) handleRequestInternal(ctx context.Context, msg *jsonrpcMessage) *jsonrpcMessage {

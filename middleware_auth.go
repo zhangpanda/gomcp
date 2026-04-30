@@ -56,6 +56,7 @@ func getHeader(ctx *Context, key string) string {
 // --- Auth Middleware ---
 
 // TokenValidator validates a bearer token and returns claims (stored in context as "_auth_claims").
+// Implement JWT or opaque-token checks yourself inside validate; this package does not parse JWTs.
 type TokenValidator func(token string) (claims map[string]any, err error)
 
 // BearerAuth returns a middleware that validates Bearer tokens.
@@ -101,12 +102,69 @@ func SSEBearerAuth(validate TokenValidator) func(*http.Request) error {
 	}
 }
 
+// SSEAPIKeyAuth returns an HTTP gate like [APIKeyAuth] but reads only the named header (no tool-argument fallback).
+func SSEAPIKeyAuth(headerName string, validate KeyValidator) func(*http.Request) error {
+	canon := http.CanonicalHeaderKey(headerName)
+	return func(r *http.Request) error {
+		key := r.Header.Get(canon)
+		if key == "" {
+			return fmt.Errorf("missing API key")
+		}
+		_, err := validate(key)
+		if err != nil {
+			return fmt.Errorf("invalid API key: %w", err)
+		}
+		return nil
+	}
+}
+
+// SSEBasicAuth returns an HTTP gate enforcing the same Basic rules as [BasicAuth].
+func SSEBasicAuth(validate func(username, password string) (map[string]any, error)) func(*http.Request) error {
+	return func(r *http.Request) error {
+		header := r.Header.Get("Authorization")
+		encoded := strings.TrimPrefix(header, "Basic ")
+		encoded = strings.TrimPrefix(encoded, "basic ")
+		if encoded == "" || encoded == header {
+			return fmt.Errorf("missing Basic auth credentials")
+		}
+		decoded, err := base64.StdEncoding.DecodeString(encoded)
+		if err != nil {
+			return fmt.Errorf("invalid Basic auth encoding")
+		}
+		user, pass, ok := strings.Cut(string(decoded), ":")
+		if !ok {
+			return fmt.Errorf("invalid Basic auth format")
+		}
+		_, err = validate(user, pass)
+		if err != nil {
+			return fmt.Errorf("authentication failed: %w", err)
+		}
+		return nil
+	}
+}
+
+// BearerAuthSkipHandshake wraps [BearerAuth] so methods from [HandshakeAuthSkipMethods] do not require a Bearer token.
+func BearerAuthSkipHandshake(validate TokenValidator) Middleware {
+	return SkipAuthForMCPMethods(HandshakeAuthSkipMethods(), BearerAuth(validate))
+}
+
+// APIKeyAuthSkipHandshake wraps [APIKeyAuth] so methods from [HandshakeAuthSkipMethods] do not require an API key.
+func APIKeyAuthSkipHandshake(headerName string, validate KeyValidator) Middleware {
+	return SkipAuthForMCPMethods(HandshakeAuthSkipMethods(), APIKeyAuth(headerName, validate))
+}
+
+// BasicAuthSkipHandshake wraps [BasicAuth] so methods from [HandshakeAuthSkipMethods] do not require Basic credentials.
+func BasicAuthSkipHandshake(validate func(username, password string) (map[string]any, error)) Middleware {
+	return SkipAuthForMCPMethods(HandshakeAuthSkipMethods(), BasicAuth(validate))
+}
+
 // KeyValidator validates an API key and returns metadata (stored in context as "_auth_claims").
 type KeyValidator func(key string) (meta map[string]any, err error)
 
 // APIKeyAuth returns a middleware that validates API keys.
 // It checks the header specified by headerName (e.g. "X-API-Key"),
-// falling back to the "api_key" tool argument.
+// falling back to the "api_key" argument merged from tools/call arguments,
+// prompts/get arguments, or resources/read params (see mergedArgsForMiddleware).
 func APIKeyAuth(headerName string, validate KeyValidator) Middleware {
 	return func(ctx *Context, next func() error) error {
 		key := getHeader(ctx, headerName)
