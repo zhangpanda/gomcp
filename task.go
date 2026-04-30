@@ -62,7 +62,10 @@ func (tm *taskManager) evictLoop() {
 	for range ticker.C {
 		now := time.Now()
 		tm.tasks.Range(func(key, value any) bool {
-			t := value.(*task)
+			t, ok := value.(*task)
+			if !ok {
+				return true
+			}
 			t.mu.Lock()
 			done := t.Status != TaskRunning
 			age := now.Sub(t.CreatedAt)
@@ -128,7 +131,8 @@ func (tm *taskManager) get(id string) (*task, bool) {
 	if !ok {
 		return nil, false
 	}
-	return v.(*task), true
+	t, ok := v.(*task)
+	return t, ok
 }
 
 func (tm *taskManager) cancel(id string) bool {

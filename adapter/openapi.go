@@ -136,7 +136,7 @@ func callOpenAPI(baseURL, method, path string, op openAPIOperation, spec *openAP
 	if err != nil {
 		return gomcp.ErrorResult("http error: " + err.Error()), nil
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	respBody, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode >= 400 {
@@ -236,8 +236,8 @@ func schemaType(t string) string {
 // --- OpenAPI 3.x structs with $ref support ---
 
 type openAPISpec struct {
-	Paths      map[string]openAPIPathItem `json:"paths" yaml:"paths"`
-	Servers    []struct {
+	Paths   map[string]openAPIPathItem `json:"paths" yaml:"paths"`
+	Servers []struct {
 		URL string `json:"url" yaml:"url"`
 	} `json:"servers" yaml:"servers"`
 	Components openAPIComponents `json:"components" yaml:"components"`
@@ -348,9 +348,9 @@ type openAPIParameter struct {
 }
 
 type openAPIRequestBody struct {
-	Description string                          `json:"description" yaml:"description"`
-	Required    bool                            `json:"required" yaml:"required"`
-	Content     map[string]openAPIMediaType     `json:"content" yaml:"content"`
+	Description string                      `json:"description" yaml:"description"`
+	Required    bool                        `json:"required" yaml:"required"`
+	Content     map[string]openAPIMediaType `json:"content" yaml:"content"`
 }
 
 func (rb *openAPIRequestBody) jsonSchema(spec *openAPISpec) openAPISchema {
@@ -372,13 +372,13 @@ type openAPIMediaType struct {
 }
 
 type openAPISchema struct {
-	Ref         string                     `json:"$ref" yaml:"$ref"`
-	Type        string                     `json:"type" yaml:"type"`
-	Description string                     `json:"description" yaml:"description"`
-	Properties  map[string]openAPISchema   `json:"properties" yaml:"properties"`
-	Required    []string                   `json:"required" yaml:"required"`
-	Items       *openAPISchema             `json:"items" yaml:"items"`
-	Enum        []string                   `json:"enum" yaml:"enum"`
+	Ref         string                   `json:"$ref" yaml:"$ref"`
+	Type        string                   `json:"type" yaml:"type"`
+	Description string                   `json:"description" yaml:"description"`
+	Properties  map[string]openAPISchema `json:"properties" yaml:"properties"`
+	Required    []string                 `json:"required" yaml:"required"`
+	Items       *openAPISchema           `json:"items" yaml:"items"`
+	Enum        []string                 `json:"enum" yaml:"enum"`
 }
 
 // coerceValue converts a string value to the appropriate Go type based on JSON Schema type.

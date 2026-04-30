@@ -38,9 +38,9 @@ type ServerInfo struct {
 
 // InitializeResult is the response to an initialize request.
 type InitializeResult struct {
-	ProtocolVersion string            `json:"protocolVersion"`
+	ProtocolVersion string             `json:"protocolVersion"`
 	Capabilities    ServerCapabilities `json:"capabilities"`
-	ServerInfo      ServerInfo        `json:"serverInfo"`
+	ServerInfo      ServerInfo         `json:"serverInfo"`
 }
 
 // ServerCapabilities declares the server's supported features.
@@ -80,12 +80,12 @@ type JSONSchema struct {
 	Properties map[string]JSONSchema `json:"properties,omitempty"`
 	Required   []string              `json:"required,omitempty"`
 	// field constraints
-	Description string   `json:"description,omitempty"`
-	Default     any      `json:"default,omitempty"`
-	Enum        []any    `json:"enum,omitempty"`
-	Minimum     *float64 `json:"minimum,omitempty"`
-	Maximum     *float64 `json:"maximum,omitempty"`
-	Pattern     string   `json:"pattern,omitempty"`
+	Description string      `json:"description,omitempty"`
+	Default     any         `json:"default,omitempty"`
+	Enum        []any       `json:"enum,omitempty"`
+	Minimum     *float64    `json:"minimum,omitempty"`
+	Maximum     *float64    `json:"maximum,omitempty"`
+	Pattern     string      `json:"pattern,omitempty"`
 	Items       *JSONSchema `json:"items,omitempty"`
 }
 

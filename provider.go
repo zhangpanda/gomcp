@@ -25,12 +25,12 @@ type DirOptions struct {
 
 // toolDef is the YAML tool definition format.
 type toolDef struct {
-	Name        string       `yaml:"name"`
-	Description string       `yaml:"description"`
-	Version     string       `yaml:"version"`
-	Params      []paramDef   `yaml:"params"`
-	Handler     string       `yaml:"handler"` // HTTP URL to forward to
-	Method      string       `yaml:"method"`  // HTTP method (default GET)
+	Name        string     `yaml:"name"`
+	Description string     `yaml:"description"`
+	Version     string     `yaml:"version"`
+	Params      []paramDef `yaml:"params"`
+	Handler     string     `yaml:"handler"` // HTTP URL to forward to
+	Method      string     `yaml:"method"`  // HTTP method (default GET)
 }
 
 type paramDef struct {

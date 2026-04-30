@@ -14,8 +14,8 @@ import (
 
 // ImportOptions controls which Gin routes are imported as MCP tools.
 type ImportOptions struct {
-	IncludePaths []string // glob-like prefixes to include (e.g. "/api/v1/*")
-	ExcludePaths []string // glob-like prefixes to exclude
+	IncludePaths []string                         // glob-like prefixes to include (e.g. "/api/v1/*")
+	ExcludePaths []string                         // glob-like prefixes to exclude
 	NamingFunc   func(method, path string) string // custom tool name generator
 }
 
@@ -160,5 +160,3 @@ func matchPrefix(path, pattern string) bool {
 	pattern = strings.TrimSuffix(pattern, "*")
 	return strings.HasPrefix(path, pattern)
 }
-
-

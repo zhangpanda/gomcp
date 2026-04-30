@@ -22,11 +22,6 @@ func ctxWithHeaders(headers map[string]string) context.Context {
 	return context.WithValue(ctx, transport.CtxKey("http_headers"), headers)
 }
 
-func ctxWithBoth(authHeader string, headers map[string]string) context.Context {
-	ctx := context.WithValue(context.Background(), transport.CtxKey("auth_header"), authHeader)
-	return context.WithValue(ctx, transport.CtxKey("http_headers"), headers)
-}
-
 func callWithCtx(s *gomcp.Server, ctx context.Context, tool string, args map[string]any) (string, bool) {
 	params, _ := json.Marshal(map[string]any{"name": tool, "arguments": args})
 	req, _ := json.Marshal(map[string]any{"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": json.RawMessage(params)})

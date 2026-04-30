@@ -19,7 +19,7 @@ type HTTPServer struct {
 	handler        MessageHandler
 	mu             sync.Mutex
 	clients        map[chan []byte]struct{} // SSE client channels
-	MaxRequestSize int64                   // 0 means default 10MB
+	MaxRequestSize int64                    // 0 means default 10MB
 }
 
 // NewHTTPServer creates a Streamable HTTP transport.

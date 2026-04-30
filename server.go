@@ -61,12 +61,12 @@ func WithMaxRequestSize(n int64) Option { return func(s *Server) { s.maxRequestS
 // New creates a new MCP Server.
 func New(name, version string, opts ...Option) *Server {
 	s := &Server{
-		name:          name,
-		version:       version,
-		tools:         make(map[string]toolEntry),
-		versionLatest: make(map[string]string),
-		logger:        slog.Default(),
-		sessions:      newSessionManager(),
+		name:           name,
+		version:        version,
+		tools:          make(map[string]toolEntry),
+		versionLatest:  make(map[string]string),
+		logger:         slog.Default(),
+		sessions:       newSessionManager(),
 		maxRequestSize: 10 << 20, // 10MB
 	}
 	for _, o := range opts {
@@ -176,7 +176,7 @@ func (s *Server) ToolFunc(name, description string, fn any, opts ...ToolOption) 
 	handler := func(ctx *Context) (*CallToolResult, error) {
 		inPtr := reflect.New(inputType)
 		if err := ctx.Bind(inPtr.Interface()); err != nil {
-			return ErrorResult("invalid parameters: " + err.Error()), nil
+			return nil, fmt.Errorf("invalid parameters: %w", err)
 		}
 		results := fv.Call([]reflect.Value{reflect.ValueOf(ctx), inPtr.Elem()})
 		if errVal := results[1]; !errVal.IsNil() {

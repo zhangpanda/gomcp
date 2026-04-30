@@ -50,12 +50,17 @@ func newSessionManager() *SessionManager {
 // Get returns an existing session or creates a new one for the given ID.
 func (sm *SessionManager) Get(id string) *Session {
 	if v, ok := sm.sessions.Load(id); ok {
-		return v.(*Session)
+		if s, ok := v.(*Session); ok {
+			return s
+		}
 	}
 	s := newSession()
 	s.ID = id
 	actual, _ := sm.sessions.LoadOrStore(id, s)
-	return actual.(*Session)
+	if sess, ok := actual.(*Session); ok {
+		return sess
+	}
+	return s
 }
 
 // GetOrCreate returns an existing session or creates one with a new ID.

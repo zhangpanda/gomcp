@@ -236,7 +236,9 @@ func TestAsyncTool_Failure(t *testing.T) {
 	})
 
 	text, _ := callRaw(t, s, "fail_task", nil)
-	var taskResp struct{ TaskID string `json:"taskId"` }
+	var taskResp struct {
+		TaskID string `json:"taskId"`
+	}
 	json.Unmarshal([]byte(text), &taskResp)
 
 	time.Sleep(50 * time.Millisecond)

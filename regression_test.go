@@ -22,7 +22,9 @@ func TestRegression_AsyncPanicNoCrash(t *testing.T) {
 		panic("async panic")
 	})
 	text, _ := callRaw(t, s, "boom", nil)
-	var tr struct{ TaskID string `json:"taskId"` }
+	var tr struct {
+		TaskID string `json:"taskId"`
+	}
 	json.Unmarshal([]byte(text), &tr)
 	time.Sleep(100 * time.Millisecond)
 
@@ -177,7 +179,9 @@ func TestRegression_TaskFieldsRace(t *testing.T) {
 	})
 	// submit and immediately poll — races on Status/Result fields
 	text, _ := callRaw(t, s, "fast", nil)
-	var tr struct{ TaskID string `json:"taskId"` }
+	var tr struct {
+		TaskID string `json:"taskId"`
+	}
 	json.Unmarshal([]byte(text), &tr)
 	// poll immediately (task may still be running)
 	callMethod(t, s, "tasks/get", map[string]any{"taskId": tr.TaskID})

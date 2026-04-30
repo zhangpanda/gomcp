@@ -156,11 +156,11 @@ func (s *Server) handleResourcesRead(msg *jsonrpcMessage) *jsonrpcMessage {
 	}
 
 	var (
-		h      ResourceHandler
-		mime   string
-		uri    string
-		args   map[string]any
-		found  bool
+		h     ResourceHandler
+		mime  string
+		uri   string
+		args  map[string]any
+		found bool
 	)
 	s.mu.RLock()
 	// static resources

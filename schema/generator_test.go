@@ -6,10 +6,10 @@ import (
 )
 
 type Simple struct {
-	Name  string  `json:"name" mcp:"required,desc=User name"`
-	Age   int     `json:"age" mcp:"min=0,max=150"`
-	Score float64 `json:"score" mcp:"default=0.0"`
-	Active bool   `json:"active"`
+	Name   string  `json:"name" mcp:"required,desc=User name"`
+	Age    int     `json:"age" mcp:"min=0,max=150"`
+	Score  float64 `json:"score" mcp:"default=0.0"`
+	Active bool    `json:"active"`
 }
 
 type WithEnum struct {

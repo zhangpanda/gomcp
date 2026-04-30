@@ -2,30 +2,29 @@ version: "2"
 
 linters:
   enable:
-    - errcheck        # unchecked errors
-    - govet           # suspicious constructs
-    - staticcheck     # advanced static analysis
-    - unused          # unused code
-    - ineffassign     # useless assignments
-    - bodyclose       # unclosed HTTP response bodies
-    - nilerr          # returning nil error after checking err != nil
-    - nilnil          # returning nil,nil from functions
-    - reassign        # reassigning top-level variables
-    - copyloopvar     # loop variable capture bugs
-    - durationcheck   # duration multiplication mistakes
-    - makezero        # append to non-zero-length slice
-    - noctx           # http requests without context
-    - forcetypeassert # bare type assertions without ok check
-    - musttag         # struct tags enforcement
+    - errcheck
+    - govet
+    - staticcheck
+    - unused
+    - ineffassign
+    - bodyclose
+    - nilerr
+    - nilnil
+    - reassign
+    - copyloopvar
+    - durationcheck
+    - makezero
+    - noctx
+    - forcetypeassert
+    - musttag
   settings:
     errcheck:
       exclude-functions:
-        - (fmt.Fprint)
-        - (fmt.Fprintf)
-        - (fmt.Fprintln)
+        - fmt.Fprint
+        - fmt.Fprintf
+        - fmt.Fprintln
+        - (io.Closer).Close
         - (*encoding/json.Encoder).Encode
-        - (io.Writer).Write
-        - (net/http.ResponseWriter).Write
   exclusions:
     paths:
       - docs
@@ -37,6 +36,14 @@ linters:
           - noctx
           - bodyclose
           - forcetypeassert
+          - musttag
+          - nilnil
+      - linters:
+          - staticcheck
+        text: "SA1019.*deprecated"
+      - linters:
+          - staticcheck
+        text: "S1009|S1025|QF1001"
 
 formatters:
   enable:

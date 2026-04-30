@@ -73,7 +73,7 @@ func (s *Server) Dev(addr string) error {
 		})
 		resp := s.HandleRaw(r.Context(), rpcReq)
 		w.Header().Set("Content-Type", "application/json")
-		w.Write(resp)
+		_, _ = w.Write(resp)
 	})
 
 	// Inspector UI

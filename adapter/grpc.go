@@ -32,7 +32,7 @@ func ImportGRPC(s *gomcp.Server, conn *grpc.ClientConn, opts GRPCOptions) error 
 	if err != nil {
 		return fmt.Errorf("grpc reflection: %w", err)
 	}
-	defer stream.CloseSend()
+	defer func() { _ = stream.CloseSend() }()
 
 	// list services
 	if err := stream.Send(&rpb.ServerReflectionRequest{

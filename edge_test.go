@@ -110,9 +110,9 @@ func TestEdge_ContextGetMissing(t *testing.T) {
 func TestEdge_ContextIntFloat_NonNumeric(t *testing.T) {
 	s := gomcp.New("test", "1.0")
 	s.Tool("test", "test", func(ctx *gomcp.Context) (*gomcp.CallToolResult, error) {
-		i := ctx.Int("name")    // "hello" → 0
-		f := ctx.Float("name")  // "hello" → 0
-		b := ctx.Bool("name")   // "hello" → false
+		i := ctx.Int("name")   // "hello" → 0
+		f := ctx.Float("name") // "hello" → 0
+		b := ctx.Bool("name")  // "hello" → false
 		if i != 0 || f != 0 || b != false {
 			return ctx.Error("wrong defaults"), nil
 		}

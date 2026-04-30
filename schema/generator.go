@@ -41,7 +41,9 @@ func Generate(t reflect.Type) Result {
 	}
 
 	if cached, ok := schemaCache.Load(t); ok {
-		return cached.(Result)
+		if res, ok := cached.(Result); ok {
+			return res
+		}
 	}
 
 	// Store a sentinel before recursing to break self-referential cycles.

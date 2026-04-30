@@ -85,7 +85,9 @@ func TestAsyncTool_ReturnsTaskID(t *testing.T) {
 	}
 
 	// extract task ID
-	var taskResp struct{ TaskID string `json:"taskId"` }
+	var taskResp struct {
+		TaskID string `json:"taskId"`
+	}
 	json.Unmarshal([]byte(text), &taskResp)
 
 	// poll for completion
@@ -108,7 +110,9 @@ func TestAsyncTool_Cancel(t *testing.T) {
 	})
 
 	text, _ := callRaw(t, s, "long", nil)
-	var taskResp struct{ TaskID string `json:"taskId"` }
+	var taskResp struct {
+		TaskID string `json:"taskId"`
+	}
 	json.Unmarshal([]byte(text), &taskResp)
 
 	// cancel
