@@ -2,6 +2,7 @@ package gomcp
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -48,22 +49,24 @@ func (s *Server) LoadDir(dir string, opts DirOptions) error {
 		opts.Interval = 2 * time.Second
 	}
 
-	if err := s.loadToolFiles(dir, opts.Pattern); err != nil {
+	if err := s.loadToolFilesSimple(dir, opts.Pattern); err != nil {
 		return err
 	}
 
 	if opts.Watch {
-		go s.watchDir(dir, opts)
+		ctx := s.ctx()
+		go s.watchDir(ctx, dir, opts)
 	}
 	return nil
 }
 
-func (s *Server) loadToolFiles(dir, pattern string) error {
+func (s *Server) loadToolFiles(dir, pattern string) (map[string]bool, error) {
 	matches, err := filepath.Glob(filepath.Join(dir, pattern))
 	if err != nil {
-		return fmt.Errorf("glob %s: %w", pattern, err)
+		return nil, fmt.Errorf("glob %s: %w", pattern, err)
 	}
 
+	loaded := make(map[string]bool)
 	for _, path := range matches {
 		data, err := os.ReadFile(path)
 		if err != nil {
@@ -76,8 +79,13 @@ func (s *Server) loadToolFiles(dir, pattern string) error {
 			continue
 		}
 		s.registerToolDef(def)
+		name := def.Name
+		if def.Version != "" {
+			name = def.Name + "@" + def.Version
+		}
+		loaded[name] = true
 	}
-	return nil
+	return loaded, nil
 }
 
 func (s *Server) registerToolDef(def toolDef) {
@@ -111,6 +119,13 @@ func (s *Server) registerToolDef(def toolDef) {
 	s.RegisterToolRaw(def.Name, def.Description, inputSchema, handler, opts...)
 }
 
+func (s *Server) loadToolFilesSimple(dir, pattern string) error {
+	_, err := s.loadToolFiles(dir, pattern)
+	return err
+}
+
+var providerHTTPClient = &http.Client{Timeout: 30 * time.Second}
+
 func callHTTPHandler(url, method string, ctx *Context) (*CallToolResult, error) {
 	var bodyReader io.Reader
 	if method == "POST" || method == "PUT" || method == "PATCH" {
@@ -134,7 +149,7 @@ func callHTTPHandler(url, method string, ctx *Context) (*CallToolResult, error) 
 		req.URL.RawQuery = q.Encode()
 	}
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := providerHTTPClient.Do(req)
 	if err != nil {
 		return ErrorResult("http error: " + err.Error()), nil
 	}
@@ -147,8 +162,8 @@ func callHTTPHandler(url, method string, ctx *Context) (*CallToolResult, error) 
 	return TextResult(string(body)), nil
 }
 
-func (s *Server) watchDir(dir string, opts DirOptions) {
-	// simple polling watcher — tracks file mod times
+func (s *Server) watchDir(ctx context.Context, dir string, opts DirOptions) {
+	// simple polling watcher — tracks file mod times and loaded tool names
 	snapshot := func() map[string]time.Time {
 		m := make(map[string]time.Time)
 		matches, _ := filepath.Glob(filepath.Join(dir, opts.Pattern))
@@ -159,12 +174,18 @@ func (s *Server) watchDir(dir string, opts DirOptions) {
 		}
 		return m
 	}
+	prevTools := make(map[string]bool) // tools loaded from previous cycle
 	modTimes := snapshot()
 
 	ticker := time.NewTicker(opts.Interval)
 	defer ticker.Stop()
 
-	for range ticker.C {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+		}
 		current := snapshot()
 		changed := len(current) != len(modTimes)
 		if !changed {
@@ -177,7 +198,16 @@ func (s *Server) watchDir(dir string, opts DirOptions) {
 		}
 		if changed {
 			s.logger.Info("tool files changed, reloading", "dir", dir)
-			s.loadToolFiles(dir, opts.Pattern)
+			loaded, _ := s.loadToolFiles(dir, opts.Pattern)
+			// Remove tools that were in the previous load but not in the current one
+			s.mu.Lock()
+			for name := range prevTools {
+				if !loaded[name] {
+					delete(s.tools, name)
+				}
+			}
+			s.mu.Unlock()
+			prevTools = loaded
 			modTimes = current
 			if opts.OnReload != nil {
 				opts.OnReload()

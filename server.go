@@ -39,7 +39,7 @@ type Server struct {
 	middlewares       []Middleware
 	logger            *slog.Logger
 	mu                sync.RWMutex
-	notifyFn          func(method string, params any) // set by HTTP transport
+	notifyFn          []func(method string, params any) // set by HTTP transport; protected by mu
 	taskMgr           *taskManager
 	completions       []completionEntry
 	sessions          *SessionManager
@@ -81,8 +81,11 @@ func (s *Server) ctx() context.Context { return context.Background() }
 func (s *Server) Sessions() *SessionManager { return s.sessions }
 
 func (s *Server) notify(method string) {
-	if s.notifyFn != nil {
-		s.notifyFn(method, nil)
+	s.mu.RLock()
+	fns := s.notifyFn
+	s.mu.RUnlock()
+	for _, fn := range fns {
+		fn(method, nil)
 	}
 }
 
@@ -157,6 +160,14 @@ func (s *Server) ToolFunc(name, description string, fn any, opts ...ToolOption) 
 	if ft.Kind() != reflect.Func || ft.NumIn() != 2 || ft.NumOut() != 2 {
 		panic(fmt.Sprintf("gomcp: ToolFunc %q requires func(*Context, Input) (Output, error)", name))
 	}
+	ctxType := reflect.TypeOf((*Context)(nil))
+	errType := reflect.TypeOf((*error)(nil)).Elem()
+	if ft.In(0) != ctxType {
+		panic(fmt.Sprintf("gomcp: ToolFunc %q first param must be *Context, got %s", name, ft.In(0)))
+	}
+	if !ft.Out(1).Implements(errType) {
+		panic(fmt.Sprintf("gomcp: ToolFunc %q second return must implement error, got %s", name, ft.Out(1)))
+	}
 
 	inputType := ft.In(1)
 	inputSchema := generateSchema(inputType)
@@ -168,8 +179,8 @@ func (s *Server) ToolFunc(name, description string, fn any, opts ...ToolOption) 
 			return ErrorResult("invalid parameters: " + err.Error()), nil
 		}
 		results := fv.Call([]reflect.Value{reflect.ValueOf(ctx), inPtr.Elem()})
-		if !results[1].IsNil() {
-			return nil, results[1].Interface().(error)
+		if errVal := results[1]; !errVal.IsNil() {
+			return nil, errVal.Interface().(error)
 		}
 		return toResult(results[0].Interface()), nil
 	}
@@ -405,6 +416,9 @@ func (s *Server) handleToolsCall(ctx context.Context, msg *jsonrpcMessage) *json
 
 	if errMsg, ok := c.Get("_chain_error"); ok {
 		return newResponse(msg.ID, ErrorResult(errMsg.(string)))
+	}
+	if result == nil {
+		result = &CallToolResult{}
 	}
 	return newResponse(msg.ID, result)
 }

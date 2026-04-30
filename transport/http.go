@@ -106,12 +106,16 @@ func (s *HTTPServer) handlePost(w http.ResponseWriter, r *http.Request) {
 	if maxSize <= 0 {
 		maxSize = 10 << 20
 	}
-	body, err := io.ReadAll(io.LimitReader(r.Body, maxSize))
+	body, err := io.ReadAll(io.LimitReader(r.Body, maxSize+1))
 	if err != nil {
 		http.Error(w, "read error", http.StatusBadRequest)
 		return
 	}
-	defer r.Body.Close()
+	r.Body.Close()
+	if int64(len(body)) > maxSize {
+		http.Error(w, "request too large", http.StatusRequestEntityTooLarge)
+		return
+	}
 
 	// inject HTTP headers into context for auth middleware
 	ctx := r.Context()

@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/zhangpanda/gomcp"
@@ -78,19 +80,22 @@ func callOpenAPI(baseURL, method, path string, op openAPIOperation, spec *openAP
 		}
 	}
 
-	var queryParts []string
+	var queryParams url.Values
 	for _, p := range op.Parameters {
 		p = spec.resolveParam(p)
 		if p.In == "query" {
 			if v := ctx.String(p.Name); v != "" {
-				queryParts = append(queryParts, p.Name+"="+v)
+				if queryParams == nil {
+					queryParams = make(url.Values)
+				}
+				queryParams.Set(p.Name, v)
 			}
 		}
 	}
 
 	fullURL := baseURL + actualPath
-	if len(queryParts) > 0 {
-		fullURL += "?" + strings.Join(queryParts, "&")
+	if len(queryParams) > 0 {
+		fullURL += "?" + queryParams.Encode()
 	}
 
 	// build body from requestBody schema fields or raw "body" param
@@ -99,9 +104,9 @@ func callOpenAPI(baseURL, method, path string, op openAPIOperation, spec *openAP
 		bodySchema := spec.resolveSchema(op.RequestBody.jsonSchema(spec))
 		if bodySchema.Type == "object" && len(bodySchema.Properties) > 0 {
 			bodyMap := make(map[string]any)
-			for name := range bodySchema.Properties {
+			for name, propSchema := range bodySchema.Properties {
 				if v := ctx.String(name); v != "" {
-					bodyMap[name] = v
+					bodyMap[name] = coerceValue(v, spec.resolveSchema(propSchema).Type)
 				}
 			}
 			if len(bodyMap) > 0 {
@@ -376,4 +381,23 @@ type openAPISchema struct {
 	Required    []string                   `json:"required" yaml:"required"`
 	Items       *openAPISchema             `json:"items" yaml:"items"`
 	Enum        []string                   `json:"enum" yaml:"enum"`
+}
+
+// coerceValue converts a string value to the appropriate Go type based on JSON Schema type.
+func coerceValue(v, schemaType string) any {
+	switch schemaType {
+	case "integer":
+		if n, err := strconv.ParseInt(v, 10, 64); err == nil {
+			return n
+		}
+	case "number":
+		if f, err := strconv.ParseFloat(v, 64); err == nil {
+			return f
+		}
+	case "boolean":
+		if b, err := strconv.ParseBool(v); err == nil {
+			return b
+		}
+	}
+	return v
 }

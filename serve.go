@@ -25,7 +25,9 @@ func (s *Server) HTTP(addr string) error {
 
 	hs := transport.NewHTTPServer(s.rawHandler)
 	hs.MaxRequestSize = s.maxRequestSize
-	s.notifyFn = hs.Notify
+	s.mu.Lock()
+	s.notifyFn = append(s.notifyFn, hs.Notify)
+	s.mu.Unlock()
 
 	mux := http.NewServeMux()
 	mux.Handle("/mcp", hs)
@@ -36,7 +38,9 @@ func (s *Server) HTTP(addr string) error {
 func (s *Server) Handler() http.Handler {
 	hs := transport.NewHTTPServer(s.rawHandler)
 	hs.MaxRequestSize = s.maxRequestSize
-	s.notifyFn = hs.Notify
+	s.mu.Lock()
+	s.notifyFn = append(s.notifyFn, hs.Notify)
+	s.mu.Unlock()
 	return hs
 }
 

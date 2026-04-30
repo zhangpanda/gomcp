@@ -39,15 +39,40 @@ type task struct {
 }
 
 type taskManager struct {
-	tasks sync.Map
-	sem   chan struct{} // concurrency limiter
+	tasks   sync.Map
+	sem     chan struct{} // concurrency limiter
+	taskTTL time.Duration
 }
 
 func newTaskManager(maxConcurrent int) *taskManager {
 	if maxConcurrent <= 0 {
 		maxConcurrent = 100
 	}
-	return &taskManager{sem: make(chan struct{}, maxConcurrent)}
+	tm := &taskManager{
+		sem:     make(chan struct{}, maxConcurrent),
+		taskTTL: 10 * time.Minute,
+	}
+	go tm.evictLoop()
+	return tm
+}
+
+func (tm *taskManager) evictLoop() {
+	ticker := time.NewTicker(time.Minute)
+	defer ticker.Stop()
+	for range ticker.C {
+		now := time.Now()
+		tm.tasks.Range(func(key, value any) bool {
+			t := value.(*task)
+			t.mu.Lock()
+			done := t.Status != TaskRunning
+			age := now.Sub(t.CreatedAt)
+			t.mu.Unlock()
+			if done && age > tm.taskTTL {
+				tm.tasks.Delete(key)
+			}
+			return true
+		})
+	}
 }
 
 func (tm *taskManager) submit(toolName string, ctx context.Context, handler func(context.Context) (*CallToolResult, error)) string {
@@ -144,27 +169,32 @@ func (s *Server) AsyncToolFunc(name, description string, fn any, opts ...ToolOpt
 	// Register normally first to get the schema-aware handler
 	s.ToolFunc(name, description, fn, opts...)
 
-	// Find the registered entry and wrap its handler
+	// Determine the exact key that was just registered
+	key := name
+	for _, o := range opts {
+		// Probe the option to find version
+		probe := &toolEntry{info: ToolInfo{Annotations: make(map[string]string)}}
+		o(probe)
+		if v, ok := probe.info.Annotations["version"]; ok && v != "" {
+			key = name + "@" + v
+		}
+	}
+
+	// Wrap only the exact tool that was just registered
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	for key, entry := range s.tools {
-		baseName := key
-		if i := len(name); len(key) > i && key[i] == '@' {
-			baseName = key[:i]
+	if entry, ok := s.tools[key]; ok {
+		original := entry.handler
+		entry.handler = func(ctx *Context) (*CallToolResult, error) {
+			args := ctx.Args()
+			logger := ctx.Logger()
+			id := s.taskMgr.submit(name, ctx.Context(), func(taskCtx context.Context) (*CallToolResult, error) {
+				asyncCtx := newContext(taskCtx, args, logger)
+				return original(asyncCtx)
+			})
+			return asyncTaskIDResult(id), nil
 		}
-		if baseName == name {
-			original := entry.handler
-			entry.handler = func(ctx *Context) (*CallToolResult, error) {
-				args := ctx.Args()
-				logger := ctx.Logger()
-				id := s.taskMgr.submit(name, ctx.Context(), func(taskCtx context.Context) (*CallToolResult, error) {
-					asyncCtx := newContext(taskCtx, args, logger)
-					return original(asyncCtx)
-				})
-				return asyncTaskIDResult(id), nil
-			}
-			s.tools[key] = entry
-		}
+		s.tools[key] = entry
 	}
 }
 
@@ -177,13 +207,20 @@ func (s *Server) ensureTaskManager() {
 }
 
 // SetMaxConcurrentTasks sets the max concurrent async tasks. Prefer calling
-// this before the first [Server.AsyncTool] or [Server.AsyncToolFunc]. If
-// a task manager already exists, the limiter is replaced; in-flight work is
-// not migrated.
+// this before the first [Server.AsyncTool] or [Server.AsyncToolFunc].
+// If a task manager already exists, only the semaphore is replaced;
+// in-flight tasks remain accessible.
 func (s *Server) SetMaxConcurrentTasks(n int) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.taskMgr = newTaskManager(n)
+	if s.taskMgr == nil {
+		s.taskMgr = newTaskManager(n)
+	} else {
+		if n <= 0 {
+			n = 100
+		}
+		s.taskMgr.sem = make(chan struct{}, n)
+	}
 }
 
 // --- Protocol handlers ---

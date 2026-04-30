@@ -38,11 +38,16 @@ func (c *Client) Initialize() map[string]any {
 func (c *Client) ListTools() []string {
 	c.t.Helper()
 	result := c.call("tools/list", map[string]any{})
+	if result == nil {
+		return nil
+	}
 	tools, _ := result["tools"].([]any)
 	names := make([]string, 0, len(tools))
 	for _, t := range tools {
 		if m, ok := t.(map[string]any); ok {
-			names = append(names, m["name"].(string))
+			if name, ok := m["name"].(string); ok {
+				names = append(names, name)
+			}
 		}
 	}
 	return names
@@ -53,6 +58,9 @@ func (c *Client) CallTool(name string, args map[string]any) *ToolResult {
 	c.t.Helper()
 	result := c.call("tools/call", map[string]any{"name": name, "arguments": args})
 	tr := &ToolResult{raw: result}
+	if result == nil {
+		return tr
+	}
 
 	if content, ok := result["content"].([]any); ok && len(content) > 0 {
 		if block, ok := content[0].(map[string]any); ok {
@@ -67,9 +75,14 @@ func (c *Client) CallTool(name string, args map[string]any) *ToolResult {
 func (c *Client) ReadResource(uri string) string {
 	c.t.Helper()
 	result := c.call("resources/read", map[string]any{"uri": uri})
+	if result == nil {
+		return ""
+	}
 	if contents, ok := result["contents"].([]any); ok && len(contents) > 0 {
 		if m, ok := contents[0].(map[string]any); ok {
-			return m["text"].(string)
+			if text, ok := m["text"].(string); ok {
+				return text
+			}
 		}
 	}
 	return ""
@@ -79,6 +92,9 @@ func (c *Client) ReadResource(uri string) string {
 func (c *Client) GetPrompt(name string, args map[string]string) []map[string]any {
 	c.t.Helper()
 	result := c.call("prompts/get", map[string]any{"name": name, "arguments": args})
+	if result == nil {
+		return nil
+	}
 	msgs, _ := result["messages"].([]any)
 	out := make([]map[string]any, 0, len(msgs))
 	for _, m := range msgs {

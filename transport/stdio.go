@@ -42,8 +42,10 @@ func serveIO(ctx context.Context, r io.Reader, w io.Writer, handler MessageHandl
 			continue
 		}
 
-		resp = append(resp, '\n')
-		if _, err := w.Write(resp); err != nil {
+		out := make([]byte, len(resp)+1)
+		copy(out, resp)
+		out[len(resp)] = '\n'
+		if _, err := w.Write(out); err != nil {
 			return err
 		}
 	}

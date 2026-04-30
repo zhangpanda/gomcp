@@ -44,7 +44,9 @@ func Generate(t reflect.Type) Result {
 		return cached.(Result)
 	}
 
+	// Store a sentinel before recursing to break self-referential cycles.
 	res := Result{Properties: make(map[string]Property)}
+	schemaCache.Store(t, res)
 
 	for i := 0; i < t.NumField(); i++ {
 		f := t.Field(i)
@@ -117,8 +119,18 @@ func fieldProp(f reflect.StructField) Property {
 		p.Required = nested.Required
 	case reflect.Slice, reflect.Array:
 		p.Type = "array"
-		elem := Property{Type: goTypeToJSON(ft.Elem().Kind())}
-		p.Items = &elem
+		elemType := ft.Elem()
+		if elemType.Kind() == reflect.Ptr {
+			elemType = elemType.Elem()
+		}
+		if elemType.Kind() == reflect.Struct {
+			nested := Generate(elemType)
+			elem := Property{Type: "object", Properties: nested.Properties, Required: nested.Required}
+			p.Items = &elem
+		} else {
+			elem := Property{Type: goTypeToJSON(elemType.Kind())}
+			p.Items = &elem
+		}
 	default:
 		p.Type = goTypeToJSON(ft.Kind())
 	}

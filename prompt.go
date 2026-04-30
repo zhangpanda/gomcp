@@ -101,24 +101,31 @@ func (s *Server) handlePromptsGet(msg *jsonrpcMessage) *jsonrpcMessage {
 	}
 
 	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	for _, p := range s.prompts {
-		if p.info.Name == params.Name {
-			args := make(map[string]any, len(params.Arguments))
-			for k, v := range params.Arguments {
-				args[k] = v
-			}
-			ctx := newContext(s.ctx(), args, s.logger)
-			messages, err := p.handler(ctx)
-			if err != nil {
-				return newErrorResponse(msg.ID, -32603, err.Error())
-			}
-			return newResponse(msg.ID, GetPromptResult{
-				Description: p.info.Description,
-				Messages:    messages,
-			})
+	var found *promptEntry
+	for i := range s.prompts {
+		if s.prompts[i].info.Name == params.Name {
+			p := s.prompts[i]
+			found = &p
+			break
 		}
 	}
-	return newErrorResponse(msg.ID, -32001, "prompt not found: "+params.Name)
+	s.mu.RUnlock()
+
+	if found == nil {
+		return newErrorResponse(msg.ID, -32001, "prompt not found: "+params.Name)
+	}
+
+	args := make(map[string]any, len(params.Arguments))
+	for k, v := range params.Arguments {
+		args[k] = v
+	}
+	ctx := newContext(s.ctx(), args, s.logger)
+	messages, err := found.handler(ctx)
+	if err != nil {
+		return newErrorResponse(msg.ID, -32603, err.Error())
+	}
+	return newResponse(msg.ID, GetPromptResult{
+		Description: found.info.Description,
+		Messages:    messages,
+	})
 }

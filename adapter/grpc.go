@@ -134,20 +134,22 @@ func registerServiceMethods(s *gomcp.Server, conn *grpc.ClientConn, sd protorefl
 		desc := fmt.Sprintf("gRPC %s", fullMethod)
 
 		inputDesc := md.Input()
+		outputDesc := md.Output()
 		inputSchema := protoMessageToSchema(inputDesc)
 
 		capturedMethod := fullMethod
 		capturedInputDesc := inputDesc
+		capturedOutputDesc := outputDesc
 
 		handler := func(ctx *gomcp.Context) (*gomcp.CallToolResult, error) {
-			return callGRPCMethod(conn, capturedMethod, capturedInputDesc, ctx)
+			return callGRPCMethod(conn, capturedMethod, capturedInputDesc, capturedOutputDesc, ctx)
 		}
 
 		s.RegisterToolRaw(toolName, desc, inputSchema, handler)
 	}
 }
 
-func callGRPCMethod(conn *grpc.ClientConn, fullMethod string, inputDesc protoreflect.MessageDescriptor, ctx *gomcp.Context) (*gomcp.CallToolResult, error) {
+func callGRPCMethod(conn *grpc.ClientConn, fullMethod string, inputDesc, outputDesc protoreflect.MessageDescriptor, ctx *gomcp.Context) (*gomcp.CallToolResult, error) {
 	// build request message from tool arguments
 	reqMsg := dynamicpb.NewMessage(inputDesc)
 	argsJSON, _ := json.Marshal(ctx.Args())
@@ -155,7 +157,7 @@ func callGRPCMethod(conn *grpc.ClientConn, fullMethod string, inputDesc protoref
 		return gomcp.ErrorResult("invalid params: " + err.Error()), nil
 	}
 
-	respMsg := dynamicpb.NewMessage(inputDesc) // placeholder, will be replaced
+	respMsg := dynamicpb.NewMessage(outputDesc)
 	err := conn.Invoke(ctx.Context(), fullMethod, reqMsg, respMsg)
 	if err != nil {
 		return gomcp.ErrorResult("gRPC error: " + err.Error()), nil
