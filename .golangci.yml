@@ -1,5 +1,10 @@
 version: "2"
 
+run:
+  exclude-dirs:
+    - docs
+    - examples
+
 linters:
   enable:
     - errcheck        # unchecked errors
@@ -21,8 +26,3 @@ linters:
 formatters:
   enable:
     - gofmt
-
-issues:
-  exclude-dirs:
-    - docs
-    - examples
