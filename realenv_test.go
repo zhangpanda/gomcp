@@ -187,9 +187,10 @@ func TestDev_Inspector(t *testing.T) {
 
 	// test /api/tools
 	resp, _ = http.Get(base + "/api/tools")
-	var tools []map[string]any
-	json.NewDecoder(resp.Body).Decode(&tools)
+	var toolsResp map[string]any
+	json.NewDecoder(resp.Body).Decode(&toolsResp)
 	resp.Body.Close()
+	tools, _ := toolsResp["tools"].([]any)
 	if len(tools) != 1 {
 		t.Errorf("/api/tools: expected 1, got %d", len(tools))
 	}
@@ -199,16 +200,18 @@ func TestDev_Inspector(t *testing.T) {
 	var res map[string]any
 	json.NewDecoder(resp.Body).Decode(&res)
 	resp.Body.Close()
-	resources, _ := res["resources"].([]any)
+	resInner, _ := res["resources"].(map[string]any)
+	resources, _ := resInner["resources"].([]any)
 	if len(resources) != 1 {
 		t.Errorf("/api/resources: expected 1, got %d", len(resources))
 	}
 
 	// test /api/prompts
 	resp, _ = http.Get(base + "/api/prompts")
-	var prompts []map[string]any
-	json.NewDecoder(resp.Body).Decode(&prompts)
+	var promptsResp map[string]any
+	json.NewDecoder(resp.Body).Decode(&promptsResp)
 	resp.Body.Close()
+	prompts, _ := promptsResp["prompts"].([]any)
 	if len(prompts) != 1 {
 		t.Errorf("/api/prompts: expected 1, got %d", len(prompts))
 	}
