@@ -5,6 +5,29 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v1.3.0] - 2026-04-30
+
+### Fixed
+- **[Critical]** gRPC adapter used input descriptor for response deserialization — all gRPC calls returned wrong/empty results
+- **[High]** `handlePromptsGet` called user handler under RLock — deadlock if handler registers tools
+- **[High]** OpenAPI adapter query parameters not URL-encoded — `&`/`=` injection risk
+- **[High]** OpenAPI adapter body fields always sent as strings — APIs expecting int/bool would fail
+- **[High]** Self-referential structs caused infinite recursion stack overflow in schema generator
+- **[High]** `[]Struct` slices generated `"string"` item schema instead of nested object schema
+- **[High]** `SetMaxConcurrentTasks` replaced entire task manager — orphaned in-flight tasks
+- **[High]** `AsyncToolFunc` wrapped all tools with matching base name — corrupted existing sync tools
+- `notifyFn` read/write data race between `notify()` and `Handler()`/`HTTP()`
+- Completed async tasks never evicted — memory leak proportional to total async calls
+- HTTP transport silently truncated oversized bodies — confusing JSON parse errors instead of 413
+- `transport/stdio` `append(resp, '\n')` could mutate handler's returned slice
+- `mcptest.Client` methods panicked on nil `call()` return or missing map keys
+- `ToolFunc` only checked parameter count, not types — invalid signatures caused runtime panics
+- Handler returning `(nil, nil)` produced `"result": null` violating MCP protocol
+- `watchDir` goroutine leaked on server shutdown (no context cancellation)
+- Deleted YAML tool files left zombie tools registered forever
+- `provider.go` HTTP client had no timeout — could hang indefinitely
+- Multiple `Handler()` calls overwrote `notifyFn` — earlier SSE clients lost notifications
+
 ## [v1.2.0] - 2026-04-29
 
 ### Added
@@ -57,6 +80,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Prompt support with argument completion
 - OpenTelemetry middleware
 
+[v1.3.0]: https://github.com/zhangpanda/gomcp/compare/v1.2.0...v1.3.0
 [v1.2.0]: https://github.com/zhangpanda/gomcp/compare/v1.1.0...v1.2.0
 [v1.1.0]: https://github.com/zhangpanda/gomcp/compare/v1.0.0...v1.1.0
 [v1.0.0]: https://github.com/zhangpanda/gomcp/releases/tag/v1.0.0

@@ -36,6 +36,7 @@ git push github main --tags
 
 ## Current Version
 
+- v1.3.0 — fix 19 bugs (critical gRPC, deadlock, race conditions, memory leaks)
 - v1.2.0 — security, maintenance, and metadata improvements
 - v1.1.0 — performance, reliability, tests, and repo hygiene
 - v1.0.0 — initial stable release
