@@ -1,10 +1,5 @@
 version: "2"
 
-run:
-  exclude-dirs:
-    - docs
-    - examples
-
 linters:
   enable:
     - errcheck        # unchecked errors
@@ -22,6 +17,10 @@ linters:
     - noctx           # http requests without context
     - forcetypeassert # bare type assertions without ok check
     - musttag         # struct tags enforcement
+  exclusions:
+    paths:
+      - docs
+      - examples
 
 formatters:
   enable:
