@@ -131,9 +131,9 @@ gomcp/
 ├── server.go              # Server core, tool/resource/prompt registration
 ├── context.go             # Request context with typed accessors
 ├── group.go               # Tool groups with prefix naming
-├── middleware.go           # Middleware、HandshakeAuthSkipMethods、[SkipAuthForMCPMethods]
+├── middleware.go           # Middleware chain helpers (SkipAuthForMCPMethods, handshake skips)
 ├── middleware_builtin.go   # Logger, Recovery, RequestID, Timeout, RateLimit
-├── middleware_auth.go      # BearerAuth, APIKeyAuth, BasicAuth, RBAC
+├── middleware_auth.go      # Bearer/API key/Basic auth, RBAC, SSE auth helpers
 ├── middleware_otel.go      # OpenTelemetry tracing
 ├── schema/                # struct tag → JSON Schema generator + validator
 ├── transport/             # stdio + Streamable HTTP + optional CORS helper

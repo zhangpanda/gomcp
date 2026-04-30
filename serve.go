@@ -18,6 +18,7 @@ func (s *Server) Stdio() error {
 }
 
 // HTTP starts the server over Streamable HTTP on the given address.
+// For browser clients using a custom mux, wrap the MCP handler with transport.WrapCORS from package transport.
 func (s *Server) HTTP(addr string) error {
 	s.logger.Info("starting MCP server", "name", s.name, "version", s.version, "transport", "http", "addr", addr)
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -36,6 +37,7 @@ func (s *Server) HTTP(addr string) error {
 }
 
 // Handler returns an http.Handler for embedding in existing HTTP servers.
+// When browsers call POST /mcp cross-origin, wrap this handler with transport.WrapCORS from package transport.
 func (s *Server) Handler() http.Handler {
 	hs := transport.NewHTTPServer(s.rawHandler)
 	hs.MaxRequestSize = s.maxRequestSize

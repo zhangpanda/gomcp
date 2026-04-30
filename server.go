@@ -61,7 +61,8 @@ func WithLogger(l *slog.Logger) Option { return func(s *Server) { s.logger = l }
 func WithMaxRequestSize(n int64) Option { return func(s *Server) { s.maxRequestSize = n } }
 
 // WithSSEAuth sets an optional handler invoked before accepting an SSE connection on Streamable HTTP GET.
-// Return a non-nil error to reject the connection (typically 401). Pair with [SSEBearerAuth] when using bearer tokens.
+// Return a non-nil error to reject the connection (typically 401).
+// Use [SSEBearerAuth], [SSEAPIKeyAuth], or [SSEBasicAuth], or supply your own check.
 func WithSSEAuth(fn func(*http.Request) error) Option {
 	return func(s *Server) { s.sseValidate = fn }
 }

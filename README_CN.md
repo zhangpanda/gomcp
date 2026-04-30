@@ -133,7 +133,7 @@ gomcp/
 ├── group.go               # 工具分组
 ├── middleware.go           # 中间件、HandshakeAuthSkipMethods、SkipAuthForMCPMethods
 ├── middleware_builtin.go   # Logger、Recovery、RequestID、Timeout、RateLimit
-├── middleware_auth.go      # BearerAuth、APIKeyAuth、BasicAuth、RBAC
+├── middleware_auth.go      # Bearer/API Key/Basic、RBAC、SSE 鉴权辅助函数
 ├── middleware_otel.go      # OpenTelemetry 追踪
 ├── schema/                # struct tag → JSON Schema 生成器 + 校验器
 ├── transport/             # stdio + Streamable HTTP + 可选 CORS 封装

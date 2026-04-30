@@ -5,6 +5,8 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
@@ -193,6 +195,79 @@ func TestAPIKeyAuth_FromParam(t *testing.T) {
 	text, isErr := callWithCtx(s, context.Background(), "ping", map[string]any{"api_key": "secret-key-123"})
 	if isErr {
 		t.Fatalf("unexpected error: %s", text)
+	}
+}
+
+func TestAPIKeyAuth_FromPromptArgs(t *testing.T) {
+	s := gomcp.New("test", "1.0")
+	s.Use(gomcp.APIKeyAuth("X-Api-Key", validKeyValidator))
+	s.Prompt("review", "review", nil, func(ctx *gomcp.Context) ([]gomcp.PromptMessage, error) {
+		return []gomcp.PromptMessage{gomcp.UserMsg("done")}, nil
+	})
+	params, _ := json.Marshal(map[string]any{
+		"name":      "review",
+		"arguments": map[string]string{"api_key": "secret-key-123"},
+	})
+	req, _ := json.Marshal(map[string]any{"jsonrpc": "2.0", "id": 1, "method": "prompts/get", "params": json.RawMessage(params)})
+	resp := s.HandleRaw(context.Background(), req)
+	if !strings.Contains(string(resp), "done") {
+		t.Fatalf("expected prompt body, got: %s", string(resp))
+	}
+}
+
+func TestAPIKeyAuth_FromResourceParams(t *testing.T) {
+	s := gomcp.New("test", "1.0")
+	s.Use(gomcp.APIKeyAuth("X-Api-Key", validKeyValidator))
+	s.Resource("vault://secret", "secret", func(ctx *gomcp.Context) (any, error) {
+		return "classified", nil
+	})
+	params, _ := json.Marshal(map[string]any{
+		"uri":     "vault://secret",
+		"api_key": "secret-key-123",
+	})
+	req, _ := json.Marshal(map[string]any{"jsonrpc": "2.0", "id": 1, "method": "resources/read", "params": json.RawMessage(params)})
+	resp := s.HandleRaw(context.Background(), req)
+	if !strings.Contains(string(resp), "classified") {
+		t.Fatalf("expected resource text, got: %s", string(resp))
+	}
+}
+
+func TestSSEAPIKeyAuth(t *testing.T) {
+	g := gomcp.SSEAPIKeyAuth("X-Api-Key", validKeyValidator)
+	r := httptest.NewRequest(http.MethodGet, "/mcp", nil)
+	if err := g(r); err == nil || !strings.Contains(err.Error(), "missing") {
+		t.Fatalf("expected missing key: %v", err)
+	}
+	r.Header.Set("X-Api-Key", "wrong")
+	if err := g(r); err == nil || !strings.Contains(err.Error(), "invalid") {
+		t.Fatalf("expected invalid: %v", err)
+	}
+	r.Header.Set("X-Api-Key", "secret-key-123")
+	if err := g(r); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestSSEBasicAuth(t *testing.T) {
+	g := gomcp.SSEBasicAuth(validBasicValidator)
+	r := httptest.NewRequest(http.MethodGet, "/mcp", nil)
+	if err := g(r); err == nil || !strings.Contains(err.Error(), "missing") {
+		t.Fatalf("expected missing basic: %v", err)
+	}
+	cred := base64.StdEncoding.EncodeToString([]byte("admin:secret"))
+	r.Header.Set("Authorization", "Basic "+cred)
+	if err := g(r); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestSkipAuthForMCPMethods_TrimsWhitespace(t *testing.T) {
+	s := gomcp.New("test", "1.0")
+	s.Use(gomcp.SkipAuthForMCPMethods([]string{" ping "}, gomcp.BearerAuth(validTokenValidator)))
+	pingReq, _ := json.Marshal(map[string]any{"jsonrpc": "2.0", "id": 1, "method": "ping"})
+	resp := s.HandleRaw(context.Background(), pingReq)
+	if !strings.Contains(string(resp), `"result"`) {
+		t.Fatalf("ping should bypass auth: %s", string(resp))
 	}
 }
 

@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- Global `Use` middleware runs for JSON-RPC methods uniformly (except notification `notifications/initialized`); Streamable HTTP request context propagates into resource and prompt handlers.
+- `WithSSEAuth` plus `SSEBearerAuth`, `SSEAPIKeyAuth`, and `SSEBasicAuth` for SSE (GET) gates.
+- `SkipAuthForMCPMethods`, `HandshakeAuthSkipMethods`, and `*SkipHandshake` auth wrappers for MCP handshake-friendly HTTP clients.
+- `transport.WrapCORS` for explicit browser `Origin` allowlists (no wildcard with credentials).
+- `mergedArgsForMiddleware` merges `api_key` from `prompts/get` arguments and `resources/read` params JSON when headers are absent.
+
+### Changed
+
+- Docs clarify Bearer validation is caller-defined (JWT decoding not built-in).
+
 ## [v1.3.0] - 2026-04-30
 
 ### Fixed

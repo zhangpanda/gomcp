@@ -1,5 +1,7 @@
 package gomcp
 
+import "strings"
+
 // HandshakeAuthSkipMethods returns MCP JSON-RPC methods that commonly omit credentials on Streamable HTTP before authenticated calls.
 // Pass the result to [SkipAuthForMCPMethods] or use helpers such as [BearerAuthSkipHandshake].
 func HandshakeAuthSkipMethods() []string {
@@ -11,13 +13,16 @@ func HandshakeAuthSkipMethods() []string {
 func SkipAuthForMCPMethods(skip []string, mw Middleware) Middleware {
 	set := make(map[string]struct{}, len(skip))
 	for _, m := range skip {
-		set[m] = struct{}{}
+		m = strings.TrimSpace(m)
+		if m != "" {
+			set[m] = struct{}{}
+		}
 	}
 	return func(ctx *Context, next func() error) error {
 		method := ""
 		if v, ok := ctx.Get("_mcp_method"); ok {
 			if s, ok := v.(string); ok {
-				method = s
+				method = strings.TrimSpace(s)
 			}
 		}
 		if _, ok := set[method]; ok {
