@@ -1,0 +1,28 @@
+version: "2"
+
+linters:
+  enable:
+    - errcheck        # unchecked errors
+    - govet           # suspicious constructs
+    - staticcheck     # advanced static analysis
+    - unused          # unused code
+    - ineffassign     # useless assignments
+    - bodyclose       # unclosed HTTP response bodies
+    - nilerr          # returning nil error after checking err != nil
+    - nilnil          # returning nil,nil from functions
+    - reassign        # reassigning top-level variables
+    - copyloopvar     # loop variable capture bugs
+    - durationcheck   # duration multiplication mistakes
+    - makezero        # append to non-zero-length slice
+    - noctx           # http requests without context
+    - forcetypeassert # bare type assertions without ok check
+    - musttag         # struct tags enforcement
+
+formatters:
+  enable:
+    - gofmt
+
+issues:
+  exclude-dirs:
+    - docs
+    - examples
