@@ -25,6 +25,27 @@ func newContext(ctx context.Context, args map[string]any, logger *slog.Logger) *
 	return &Context{ctx: ctx, args: args, logger: logger, store: make(map[string]any)}
 }
 
+// forkContext creates a child Context that shares the parent's deadline/cancellation and
+// shallow-copies the parent's store (auth claims, request_id, etc.) for tool/resource/prompt handlers.
+func forkContext(parent *Context, args map[string]any, logger *slog.Logger) *Context {
+	if args == nil {
+		args = make(map[string]any)
+	}
+	child := &Context{
+		ctx:    parent.ctx,
+		args:   args,
+		logger: logger,
+		store:  make(map[string]any),
+	}
+	parent.mu.RLock()
+	for k, v := range parent.store {
+		child.store[k] = v
+	}
+	parent.mu.RUnlock()
+	child.session = parent.session
+	return child
+}
+
 // Context returns the underlying context.Context.
 func (c *Context) Context() context.Context { return c.ctx }
 

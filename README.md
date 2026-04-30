@@ -2,7 +2,7 @@
 
 [![Go Version](https://img.shields.io/badge/Go-1.25+-00ADD8?style=flat&logo=go)](https://go.dev)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
-[![Release](https://img.shields.io/badge/Release-v1.0.0-green.svg)](https://github.com/zhangpanda/gomcp/releases)
+[![Release](https://img.shields.io/badge/Release-v1.3.0-green.svg)](https://github.com/zhangpanda/gomcp/releases)
 [![gomcp MCP server](https://glama.ai/mcp/servers/zhangpanda/gomcp/badges/score.svg)](https://glama.ai/mcp/servers/zhangpanda/gomcp)
 
 **The fast, idiomatic way to build MCP servers in Go.**
@@ -55,7 +55,7 @@ MCP is the open protocol that lets AI applications (Claude Desktop, Cursor, Kiro
 
 | Technology | Description |
 |------------|-------------|
-| **Go standard library** | Core framework — zero external dependencies |
+| **Go standard library** | Framework routing, JSON-RPC, transports — no forced DB/ORM deps |
 | **Gin** | Adapter only — import existing Gin routes |
 | **gRPC** | Adapter only — import gRPC services |
 | **OpenTelemetry** | Optional — distributed tracing |
@@ -282,7 +282,7 @@ s.Prompt("code_review", "Code review",
 ### Middleware
 
 ```go
-s.Use(gomcp.Logger())                              // Log tool name + duration
+s.Use(gomcp.Logger())                              // Log MCP method + duration
 s.Use(gomcp.Recovery())                            // Recover from panics
 s.Use(gomcp.RequestID())                           // Unique request ID
 s.Use(gomcp.Timeout(10 * time.Second))             // Deadline enforcement
@@ -445,6 +445,14 @@ Works with Claude Desktop, Cursor, Kiro, Windsurf, VS Code Copilot, and any MCP-
 ---
 
 ## 🔒 Security
+
+### HTTP transport and authentication
+
+- **`Use` middleware runs for every JSON-RPC method** (except the notification `notifications/initialized`, which has no response): `initialize`, `tools/list`, `tools/call`, `resources/read`, `prompts/get`, `tasks/*`, `completion/complete`, etc. Use `BearerAuth` / `APIKeyAuth` / `BasicAuth` when exposing **`POST /mcp`**. For **`APIKeyAuth`**, the `api_key` tool argument is merged into the middleware view for **`tools/call`** so header-less clients can still authenticate the same way as before.
+- **Request context propagates** into tool, resource, and prompt handlers (deadlines, `Authorization`, and injected headers from Streamable HTTP).
+- **SSE (`GET /mcp`)** does not execute MCP middleware. To require the same Bearer token as JSON-RPC, register **`gomcp.WithSSEAuth(gomcp.SSEBearerAuth(validator))`** (or your own gate). Without `WithSSEAuth`, any client that can open `GET` receives broadcast notifications.
+
+When deploying Streamable HTTP in production, combine TLS, authentication middleware on `POST`, and **`WithSSEAuth`** when notifications must not be public.
 
 To report security vulnerabilities, see [SECURITY.md](SECURITY.md).
 

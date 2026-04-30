@@ -217,8 +217,9 @@ func TestEnterprise_MultiGroupAuthChain(t *testing.T) {
 		t.Errorf("no auth should be rejected: %s", text)
 	}
 
-	// Test 6: tools/list shows all tools
-	resp := callMethod(t, s, "tools/list", map[string]any{})
+	// Test 6: tools/list requires the same auth as tools/call when middleware is enabled
+	ctx = context.WithValue(context.Background(), transport.CtxKey("auth_header"), "Bearer user-token")
+	resp := callMethodCtx(t, s, ctx, "tools/list", map[string]any{})
 	respStr := string(resp)
 	for _, name := range []string{"user.profile", "admin.delete", "admin.super.nuke"} {
 		if !strings.Contains(respStr, name) {

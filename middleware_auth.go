@@ -61,7 +61,7 @@ type TokenValidator func(token string) (claims map[string]any, err error)
 // BearerAuth returns a middleware that validates Bearer tokens.
 func BearerAuth(validate TokenValidator) Middleware {
 	return func(ctx *Context, next func() error) error {
-		header := getAuthHeader(ctx)
+		header := strings.TrimSpace(getAuthHeader(ctx))
 		token := strings.TrimPrefix(header, "Bearer ")
 		token = strings.TrimPrefix(token, "bearer ")
 		if token == "" || token == header {
@@ -81,6 +81,23 @@ func BearerAuth(validate TokenValidator) Middleware {
 			}
 		}
 		return next()
+	}
+}
+
+// SSEBearerAuth returns an HTTP gate suitable for [WithSSEAuth], enforcing the same Bearer rules as [BearerAuth].
+func SSEBearerAuth(validate TokenValidator) func(*http.Request) error {
+	return func(r *http.Request) error {
+		header := strings.TrimSpace(r.Header.Get("Authorization"))
+		token := strings.TrimPrefix(header, "Bearer ")
+		token = strings.TrimPrefix(token, "bearer ")
+		if token == "" || token == header {
+			return fmt.Errorf("missing or invalid Bearer token")
+		}
+		_, err := validate(token)
+		if err != nil {
+			return fmt.Errorf("authentication failed: %w", err)
+		}
+		return nil
 	}
 }
 

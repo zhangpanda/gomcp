@@ -149,7 +149,7 @@ func (s *Server) handleResourceTemplatesList(msg *jsonrpcMessage) *jsonrpcMessag
 	return newResponse(msg.ID, ResourceTemplateListResult{ResourceTemplates: templates})
 }
 
-func (s *Server) handleResourcesRead(msg *jsonrpcMessage) *jsonrpcMessage {
+func (s *Server) handleResourcesRead(parent *Context, msg *jsonrpcMessage) *jsonrpcMessage {
 	var params ReadResourceParams
 	if err := json.Unmarshal(msg.Params, &params); err != nil {
 		return newErrorResponse(msg.ID, -32602, "invalid params")
@@ -190,11 +190,11 @@ func (s *Server) handleResourcesRead(msg *jsonrpcMessage) *jsonrpcMessage {
 	if !found {
 		return newErrorResponse(msg.ID, -32002, "resource not found: "+params.URI)
 	}
-	return s.execResource(msg, h, mime, uri, args)
+	return s.execResource(parent, msg, h, mime, uri, args)
 }
 
-func (s *Server) execResource(msg *jsonrpcMessage, handler ResourceHandler, mime, uri string, args map[string]any) *jsonrpcMessage {
-	ctx := newContext(s.ctx(), args, s.logger)
+func (s *Server) execResource(parent *Context, msg *jsonrpcMessage, handler ResourceHandler, mime, uri string, args map[string]any) *jsonrpcMessage {
+	ctx := forkContext(parent, args, s.logger)
 	result, err := handler(ctx)
 	if err != nil {
 		return newErrorResponse(msg.ID, -32603, err.Error())

@@ -232,6 +232,14 @@ func callMethod(t *testing.T, s *gomcp.Server, method string, params map[string]
 	return s.HandleRaw(context.Background(), req)
 }
 
+// callMethodCtx is like callMethod but uses the given context (for injected HTTP headers / auth).
+func callMethodCtx(t *testing.T, s *gomcp.Server, ctx context.Context, method string, params map[string]any) json.RawMessage {
+	t.Helper()
+	paramsJSON, _ := json.Marshal(params)
+	req, _ := json.Marshal(map[string]any{"jsonrpc": "2.0", "id": 1, "method": method, "params": json.RawMessage(paramsJSON)})
+	return s.HandleRaw(ctx, req)
+}
+
 // --- Completion tests ---
 
 func TestCompletion_PromptArg(t *testing.T) {

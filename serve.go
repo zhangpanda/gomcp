@@ -25,6 +25,7 @@ func (s *Server) HTTP(addr string) error {
 
 	hs := transport.NewHTTPServer(s.rawHandler)
 	hs.MaxRequestSize = s.maxRequestSize
+	hs.ValidateSSE = s.sseValidate
 	s.mu.Lock()
 	s.notifyFn = append(s.notifyFn, hs.Notify)
 	s.mu.Unlock()
@@ -38,6 +39,7 @@ func (s *Server) HTTP(addr string) error {
 func (s *Server) Handler() http.Handler {
 	hs := transport.NewHTTPServer(s.rawHandler)
 	hs.MaxRequestSize = s.maxRequestSize
+	hs.ValidateSSE = s.sseValidate
 	s.mu.Lock()
 	s.notifyFn = append(s.notifyFn, hs.Notify)
 	s.mu.Unlock()

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"reflect"
 	"sort"
 	"strconv"
@@ -44,6 +45,7 @@ type Server struct {
 	completions       []completionEntry
 	sessions          *SessionManager
 	maxRequestSize    int64 // default 10MB
+	sseValidate       func(*http.Request) error // optional SSE (GET) gate for Streamable HTTP
 }
 
 // Option configures the Server.
@@ -57,6 +59,12 @@ func WithLogger(l *slog.Logger) Option { return func(s *Server) { s.logger = l }
 
 // WithMaxRequestSize sets the maximum request body size in bytes (default 10MB).
 func WithMaxRequestSize(n int64) Option { return func(s *Server) { s.maxRequestSize = n } }
+
+// WithSSEAuth sets an optional handler invoked before accepting an SSE connection on Streamable HTTP GET.
+// Return a non-nil error to reject the connection (typically 401). Pair with [SSEBearerAuth] when using bearer tokens.
+func WithSSEAuth(fn func(*http.Request) error) Option {
+	return func(s *Server) { s.sseValidate = fn }
+}
 
 // New creates a new MCP Server.
 func New(name, version string, opts ...Option) *Server {
@@ -292,28 +300,77 @@ func (s *Server) HandleRaw(ctx context.Context, raw json.RawMessage) json.RawMes
 	return s.rawHandler(ctx, raw)
 }
 
+// mergedArgsForMiddleware exposes JSON-RPC params to global middleware before dispatch so values
+// like tools/call "arguments" can inform auth (e.g. [APIKeyAuth] reading api_key without a header).
+func mergedArgsForMiddleware(msg *jsonrpcMessage) map[string]any {
+	if msg.Method != "tools/call" {
+		return nil
+	}
+	var params CallToolParams
+	if err := json.Unmarshal(msg.Params, &params); err != nil || params.Arguments == nil {
+		return nil
+	}
+	out := make(map[string]any, len(params.Arguments))
+	for k, v := range params.Arguments {
+		out[k] = v
+	}
+	return out
+}
+
 func (s *Server) handleRequestInternal(ctx context.Context, msg *jsonrpcMessage) *jsonrpcMessage {
+	if msg.Method == "notifications/initialized" {
+		return nil
+	}
+
+	s.mu.RLock()
+	mws := make([]Middleware, len(s.middlewares))
+	copy(mws, s.middlewares)
+	s.mu.RUnlock()
+
+	base := newContext(ctx, mergedArgsForMiddleware(msg), s.logger)
+	base.Set("_mcp_method", msg.Method)
+
+	var resp *jsonrpcMessage
+	var chainErr error
+	func() {
+		defer func() {
+			if r := recover(); r != nil {
+				s.logger.Error("panic in MCP dispatch", "method", msg.Method, "panic", fmt.Sprintf("%v", r))
+				resp = newResponse(msg.ID, ErrorResult(fmt.Sprintf("internal error: %v", r)))
+			}
+		}()
+		chainErr = executeChain(base, mws, func() error {
+			resp = s.dispatchMethod(base, msg)
+			return nil
+		})
+	}()
+
+	if chainErr != nil {
+		return newResponse(msg.ID, ErrorResult(chainErr.Error()))
+	}
+	return resp
+}
+
+func (s *Server) dispatchMethod(base *Context, msg *jsonrpcMessage) *jsonrpcMessage {
 	switch msg.Method {
 	case "initialize":
 		return s.handleInitialize(msg)
-	case "notifications/initialized":
-		return nil
 	case "ping":
 		return newResponse(msg.ID, map[string]any{})
 	case "tools/list":
 		return s.handleToolsList(msg)
 	case "tools/call":
-		return s.handleToolsCall(ctx, msg)
+		return s.handleToolsCall(base, msg)
 	case "resources/list":
 		return s.handleResourcesList(msg)
 	case "resources/templates/list":
 		return s.handleResourceTemplatesList(msg)
 	case "resources/read":
-		return s.handleResourcesRead(msg)
+		return s.handleResourcesRead(base, msg)
 	case "prompts/list":
 		return s.handlePromptsList(msg)
 	case "prompts/get":
-		return s.handlePromptsGet(msg)
+		return s.handlePromptsGet(base, msg)
 	case "tasks/get":
 		return s.handleTasksGet(msg)
 	case "tasks/cancel":
@@ -358,7 +415,7 @@ func (s *Server) handleToolsList(msg *jsonrpcMessage) *jsonrpcMessage {
 	return newResponse(msg.ID, ToolListResult{Tools: tools})
 }
 
-func (s *Server) handleToolsCall(ctx context.Context, msg *jsonrpcMessage) *jsonrpcMessage {
+func (s *Server) handleToolsCall(parent *Context, msg *jsonrpcMessage) *jsonrpcMessage {
 	var params CallToolParams
 	if err := json.Unmarshal(msg.Params, &params); err != nil {
 		return newErrorResponse(msg.ID, -32602, "invalid params: "+err.Error())
@@ -370,8 +427,6 @@ func (s *Server) handleToolsCall(ctx context.Context, msg *jsonrpcMessage) *json
 		// version fallback: "search" → try find "search" or latest "search@*"
 		entry, ok = s.resolveToolVersion(params.Name)
 	}
-	mws := make([]Middleware, len(s.middlewares))
-	copy(mws, s.middlewares)
 	s.mu.RUnlock()
 
 	if !ok {
@@ -385,11 +440,11 @@ func (s *Server) handleToolsCall(ctx context.Context, msg *jsonrpcMessage) *json
 		}
 	}
 
-	c := newContext(ctx, params.Arguments, s.logger.With("tool", params.Name))
+	c := forkContext(parent, params.Arguments, s.logger.With("tool", params.Name))
 	c.Set("_tool_name", params.Name)
 
 	// attach session (header name matched case-insensitively, like net/http)
-	sessionID := transport.LookupHeader(ctx, "Mcp-Session-Id")
+	sessionID := transport.LookupHeader(c.ctx, "Mcp-Session-Id")
 	c.session = s.sessions.GetOrCreate(sessionID)
 
 	var result *CallToolResult
@@ -402,7 +457,7 @@ func (s *Server) handleToolsCall(ctx context.Context, msg *jsonrpcMessage) *json
 				c.Set("_panic", fmt.Sprintf("internal error: %v", r))
 			}
 		}()
-		err := executeChain(c, mws, func() error {
+		err := executeChain(c, nil, func() error {
 			var handlerErr error
 			result, handlerErr = entry.handler(c)
 			return handlerErr

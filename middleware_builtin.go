@@ -10,12 +10,14 @@ import (
 	"github.com/zhangpanda/gomcp/internal/uid"
 )
 
-// Logger returns a middleware that logs tool calls with duration.
+// Logger returns a middleware that logs each MCP request with duration.
 func Logger() Middleware {
 	return func(ctx *Context, next func() error) error {
 		start := time.Now()
 		err := next()
-		ctx.Logger().Info("tool call",
+		method, _ := ctx.Get("_mcp_method")
+		ctx.Logger().Info("mcp request",
+			"method", method,
 			"duration", time.Since(start).String(),
 			"error", err,
 		)
@@ -48,7 +50,7 @@ func RequestID() Middleware {
 	}
 }
 
-// Timeout returns a middleware that enforces a deadline on tool execution.
+// Timeout returns a middleware that enforces a deadline on the entire MCP request (including dispatch to tools/resources/prompts).
 // The request context is replaced with a timeout context; handlers should
 // use [Context.Context] and check [context.Context.Done] to cancel work
 // so long calls return promptly when the deadline hits.
@@ -58,7 +60,11 @@ func Timeout(d time.Duration) Middleware {
 		defer cancel()
 		ctx.ctx = tctx
 		err := next()
-		// Unwrap to stable message for tool clients (and tests).
+		// Handler errors may be encoded into JSON-RPC results instead of returning through the chain;
+		// still honor the deadline on the timeout context.
+		if errors.Is(tctx.Err(), context.DeadlineExceeded) {
+			return fmt.Errorf("tool execution timed out after %s", d)
+		}
 		if err != nil && errors.Is(err, context.DeadlineExceeded) {
 			return fmt.Errorf("tool execution timed out after %s", d)
 		}

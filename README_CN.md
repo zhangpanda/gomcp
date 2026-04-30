@@ -2,7 +2,7 @@
 
 [![Go Version](https://img.shields.io/badge/Go-1.25+-00ADD8?style=flat&logo=go)](https://go.dev)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
-[![Release](https://img.shields.io/badge/Release-v1.0.0-green.svg)](https://github.com/zhangpanda/gomcp/releases)
+[![Release](https://img.shields.io/badge/Release-v1.3.0-green.svg)](https://github.com/zhangpanda/gomcp/releases)
 [![gomcp MCP server](https://glama.ai/mcp/servers/zhangpanda/gomcp/badges/score.svg)](https://glama.ai/mcp/servers/zhangpanda/gomcp)
 
 **用 Go 构建 MCP Server 的最快方式。**
@@ -55,7 +55,7 @@ MCP 是 Anthropic 发布的开放协议，让 AI 应用（Claude Desktop、Curso
 
 | 技术 | 说明 |
 |------|------|
-| **Go 标准库** | 核心框架——零外部依赖 |
+| **Go 标准库** | 路由、JSON-RPC、传输层——无强制引入数据库/ORM 类依赖 |
 | **Gin** | 仅适配器——导入现有 Gin 路由 |
 | **gRPC** | 仅适配器——导入 gRPC 服务 |
 | **OpenTelemetry** | 可选——分布式追踪 |
@@ -267,7 +267,7 @@ s.ResourceTemplate("db://{table}/{id}", "数据库记录", func(ctx *gomcp.Conte
 ### 中间件
 
 ```go
-s.Use(gomcp.Logger())                              // 记录工具名 + 耗时
+s.Use(gomcp.Logger())                              // 记录 MCP 方法 + 耗时
 s.Use(gomcp.Recovery())                            // panic 恢复
 s.Use(gomcp.RequestID())                           // 唯一请求 ID
 s.Use(gomcp.Timeout(10 * time.Second))             // 超时控制
@@ -411,6 +411,14 @@ s.Handler()        // 嵌入现有 HTTP 服务
 ---
 
 ## 🔒 安全披露
+
+### HTTP 传输与认证
+
+- **`Use` 注册的中间件会对几乎所有 JSON-RPC 方法生效**（除仅通知、无响应体的 `notifications/initialized`）：包括 `initialize`、`tools/list`、`tools/call`、`resources/read`、`prompts/get`、`tasks/*`、`completion/complete` 等。对外暴露 **`POST /mcp`** 时应配合 `BearerAuth` / `APIKeyAuth` / `BasicAuth`。**`APIKeyAuth`** 会将 **`tools/call` 的 `arguments`** 中的键合并进中间件可见的参数（例如工具参数里的 `api_key`），以便在无自定义 Header 时仍能认证。
+- **请求的 `context.Context` 会传递到工具、资源与 Prompt 的 handler**（截止时间、`Authorization`、Streamable HTTP 注入的头等）。
+- **SSE（`GET /mcp`）不会走 MCP 中间件链**。若需与 JSON-RPC 相同的 Bearer 校验，请配置 **`gomcp.WithSSEAuth(gomcp.SSEBearerAuth(validator))`**（或自定义校验函数）。未配置时，能访问 `GET` 的客户端可订阅广播通知。
+
+生产环境部署 Streamable HTTP 时，建议同时使用 TLS、`POST` 侧认证中间件，以及在通知内容敏感时启用 **`WithSSEAuth`**。
 
 报告安全漏洞请参阅 [SECURITY.md](SECURITY.md)。
 

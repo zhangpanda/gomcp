@@ -19,7 +19,9 @@ type HTTPServer struct {
 	handler        MessageHandler
 	mu             sync.Mutex
 	clients        map[chan []byte]struct{} // SSE client channels
-	MaxRequestSize int64                    // 0 means default 10MB
+	MaxRequestSize int64                   // 0 means default 10MB
+	// ValidateSSE is invoked before subscribing an SSE client; return non-nil to reject with 401.
+	ValidateSSE func(*http.Request) error
 }
 
 // NewHTTPServer creates a Streamable HTTP transport.
@@ -36,7 +38,10 @@ func (s *HTTPServer) Notify(method string, params any) {
 	if params != nil {
 		msg["params"] = params
 	}
-	data, _ := json.Marshal(msg)
+	data, err := json.Marshal(msg)
+	if err != nil {
+		return
+	}
 	event := []byte("data: " + string(data) + "\n\n")
 
 	s.mu.Lock()
@@ -74,6 +79,12 @@ func (s *HTTPServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *HTTPServer) handleSSE(w http.ResponseWriter, r *http.Request) {
+	if s.ValidateSSE != nil {
+		if err := s.ValidateSSE(r); err != nil {
+			http.Error(w, err.Error(), http.StatusUnauthorized)
+			return
+		}
+	}
 	flusher, ok := w.(http.Flusher)
 	if !ok {
 		http.Error(w, "streaming not supported", http.StatusInternalServerError)

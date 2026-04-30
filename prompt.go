@@ -94,7 +94,7 @@ func (s *Server) handlePromptsList(msg *jsonrpcMessage) *jsonrpcMessage {
 	return newResponse(msg.ID, PromptListResult{Prompts: prompts})
 }
 
-func (s *Server) handlePromptsGet(msg *jsonrpcMessage) *jsonrpcMessage {
+func (s *Server) handlePromptsGet(parent *Context, msg *jsonrpcMessage) *jsonrpcMessage {
 	var params GetPromptParams
 	if err := json.Unmarshal(msg.Params, &params); err != nil {
 		return newErrorResponse(msg.ID, -32602, "invalid params")
@@ -119,7 +119,7 @@ func (s *Server) handlePromptsGet(msg *jsonrpcMessage) *jsonrpcMessage {
 	for k, v := range params.Arguments {
 		args[k] = v
 	}
-	ctx := newContext(s.ctx(), args, s.logger)
+	ctx := forkContext(parent, args, s.logger)
 	messages, err := found.handler(ctx)
 	if err != nil {
 		return newErrorResponse(msg.ID, -32603, err.Error())
