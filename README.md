@@ -99,6 +99,7 @@ MCP is the open protocol that lets AI applications (Claude Desktop, Cursor, Kiro
 - **MCP Inspector** — built-in web debug UI for browsing and testing tools
 - **Hot-reload** — load tool definitions from YAML files with file watching
 - **mcptest package** — in-memory client for unit testing with snapshot support
+- **Lifecycle** — `Close()`, session idle eviction, async concurrency — see [**Server lifecycle, sessions & async tasks**](#server-lifecycle).
 
 ---
 
@@ -368,6 +369,15 @@ s.AsyncTool("report", "Generate report", func(ctx *gomcp.Context) (*gomcp.CallTo
 ```go
 s.LoadDir("./tools/", gomcp.DirOptions{Watch: true})
 ```
+
+<a id="server-lifecycle"></a>
+
+### Server lifecycle, sessions & async tasks
+
+- **`Server.Close()`** — When your process or test tears down a server that uses **`LoadDir(..., Watch: true)`** or long-lived HTTP, call **`Close()`** once. It stops the YAML watch loop, the **session eviction** background goroutine, and the **async task manager** eviction loop. The call is **idempotent**.
+- **Sessions** — Session state is **in-memory only**. Identifiers come from the client `Mcp-Session-Id` header (see Streamable HTTP). **Sessions idle for 30 minutes** (no access via that ID) are **removed**; the next request with the same ID gets a **new empty session**. Do not rely on `Session` storage across long idle periods unless the client keeps traffic or you refresh state yourself.
+- **`SetMaxConcurrentTasks(n)`** — Set this **before** the first **`AsyncTool` / `AsyncToolFunc`**. After the internal task manager is created, later calls are a **no-op** (avoids races with in-flight work).
+- **Shutdown vs async work** — `Close()` does **not** wait for async tool handlers that are still running; add your own **timeout / wait** if you need hard guarantees before exit.
 
 ### MCP Inspector
 

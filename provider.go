@@ -2,7 +2,6 @@ package gomcp
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -54,8 +53,7 @@ func (s *Server) LoadDir(dir string, opts DirOptions) error {
 	}
 
 	if opts.Watch {
-		ctx := s.ctx()
-		go s.watchDir(ctx, dir, opts)
+		go s.watchDir(dir, opts)
 	}
 	return nil
 }
@@ -154,7 +152,13 @@ func callHTTPHandler(url, method string, ctx *Context) (*CallToolResult, error) 
 		return ErrorResult("http error: " + err.Error()), nil
 	}
 	defer func() { _ = resp.Body.Close() }()
-	body, _ := io.ReadAll(resp.Body)
+	const maxResponseSize = 10 << 20 // 10MB
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseSize))
+	if err != nil {
+		return ErrorResult("read error: " + err.Error()), nil
+	}
+	// Drain remainder so keep-alive connections stay reusable.
+	_, _ = io.Copy(io.Discard, resp.Body)
 
 	if resp.StatusCode >= 400 {
 		return ErrorResult(fmt.Sprintf("HTTP %d: %s", resp.StatusCode, string(body))), nil
@@ -162,7 +166,7 @@ func callHTTPHandler(url, method string, ctx *Context) (*CallToolResult, error) 
 	return TextResult(string(body)), nil
 }
 
-func (s *Server) watchDir(ctx context.Context, dir string, opts DirOptions) {
+func (s *Server) watchDir(dir string, opts DirOptions) {
 	// simple polling watcher — tracks file mod times and loaded tool names
 	snapshot := func() map[string]time.Time {
 		m := make(map[string]time.Time)
@@ -182,7 +186,7 @@ func (s *Server) watchDir(ctx context.Context, dir string, opts DirOptions) {
 
 	for {
 		select {
-		case <-ctx.Done():
+		case <-s.done:
 			return
 		case <-ticker.C:
 		}

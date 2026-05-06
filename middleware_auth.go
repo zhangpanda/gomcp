@@ -63,9 +63,11 @@ type TokenValidator func(token string) (claims map[string]any, err error)
 func BearerAuth(validate TokenValidator) Middleware {
 	return func(ctx *Context, next func() error) error {
 		header := strings.TrimSpace(getAuthHeader(ctx))
-		token := strings.TrimPrefix(header, "Bearer ")
-		token = strings.TrimPrefix(token, "bearer ")
-		if token == "" || token == header {
+		if len(header) <= 7 || !strings.EqualFold(header[:7], "bearer ") {
+			return authError("missing or invalid Bearer token")
+		}
+		token := strings.TrimSpace(header[7:])
+		if token == "" {
 			return authError("missing or invalid Bearer token")
 		}
 		claims, err := validate(token)
@@ -89,9 +91,11 @@ func BearerAuth(validate TokenValidator) Middleware {
 func SSEBearerAuth(validate TokenValidator) func(*http.Request) error {
 	return func(r *http.Request) error {
 		header := strings.TrimSpace(r.Header.Get("Authorization"))
-		token := strings.TrimPrefix(header, "Bearer ")
-		token = strings.TrimPrefix(token, "bearer ")
-		if token == "" || token == header {
+		if len(header) <= 7 || !strings.EqualFold(header[:7], "bearer ") {
+			return fmt.Errorf("missing or invalid Bearer token")
+		}
+		token := strings.TrimSpace(header[7:])
+		if token == "" {
 			return fmt.Errorf("missing or invalid Bearer token")
 		}
 		_, err := validate(token)
@@ -122,9 +126,11 @@ func SSEAPIKeyAuth(headerName string, validate KeyValidator) func(*http.Request)
 func SSEBasicAuth(validate func(username, password string) (map[string]any, error)) func(*http.Request) error {
 	return func(r *http.Request) error {
 		header := r.Header.Get("Authorization")
-		encoded := strings.TrimPrefix(header, "Basic ")
-		encoded = strings.TrimPrefix(encoded, "basic ")
-		if encoded == "" || encoded == header {
+		if len(header) <= 6 || !strings.EqualFold(header[:6], "basic ") {
+			return fmt.Errorf("missing Basic auth credentials")
+		}
+		encoded := strings.TrimSpace(header[6:])
+		if encoded == "" {
 			return fmt.Errorf("missing Basic auth credentials")
 		}
 		decoded, err := base64.StdEncoding.DecodeString(encoded)
@@ -192,9 +198,11 @@ func APIKeyAuth(headerName string, validate KeyValidator) Middleware {
 func BasicAuth(validate func(username, password string) (map[string]any, error)) Middleware {
 	return func(ctx *Context, next func() error) error {
 		header := getAuthHeader(ctx)
-		encoded := strings.TrimPrefix(header, "Basic ")
-		encoded = strings.TrimPrefix(encoded, "basic ")
-		if encoded == "" || encoded == header {
+		if len(header) <= 6 || !strings.EqualFold(header[:6], "basic ") {
+			return authError("missing Basic auth credentials")
+		}
+		encoded := strings.TrimSpace(header[6:])
+		if encoded == "" {
 			return authError("missing Basic auth credentials")
 		}
 		decoded, err := base64.StdEncoding.DecodeString(encoded)

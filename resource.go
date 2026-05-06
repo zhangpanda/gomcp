@@ -92,7 +92,11 @@ func (s *Server) ResourceTemplate(uriTemplate, name string, handler ResourceHand
 	for _, m := range paramRe.FindAllStringSubmatch(uriTemplate, -1) {
 		params = append(params, m[1])
 	}
-	regexStr := "^" + paramRe.ReplaceAllString(uriTemplate, `([^/]+)`) + "$"
+	// Replace params with placeholder, escape the rest, then restore placeholders
+	escaped := paramRe.ReplaceAllString(uriTemplate, "\x00")
+	escaped = regexp.QuoteMeta(escaped)
+	escaped = strings.ReplaceAll(escaped, "\x00", `([^/]+)`)
+	regexStr := "^" + escaped + "$"
 
 	s.mu.Lock()
 	s.resourceTemplates = append(s.resourceTemplates, resourceTemplateEntry{

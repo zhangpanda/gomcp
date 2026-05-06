@@ -46,6 +46,8 @@ type Server struct {
 	sessions          *SessionManager
 	maxRequestSize    int64                     // default 10MB
 	sseValidate       func(*http.Request) error // optional SSE (GET) gate for Streamable HTTP
+	closeOnce         sync.Once
+	done              chan struct{} // closed by Close() to stop background goroutines
 }
 
 // Option configures the Server.
@@ -77,6 +79,7 @@ func New(name, version string, opts ...Option) *Server {
 		logger:         slog.Default(),
 		sessions:       newSessionManager(),
 		maxRequestSize: 10 << 20, // 10MB
+		done:           make(chan struct{}),
 	}
 	for _, o := range opts {
 		o(s)
@@ -84,7 +87,21 @@ func New(name, version string, opts ...Option) *Server {
 	return s
 }
 
-func (s *Server) ctx() context.Context { return context.Background() }
+// Close stops background work tied to the server: the session manager eviction loop,
+// the signal used by LoadDir(Watch: true), and the async task manager eviction loop.
+// It is idempotent. It does not wait for in-flight AsyncTool handlers to finish.
+func (s *Server) Close() {
+	s.closeOnce.Do(func() {
+		close(s.done)
+		s.sessions.close()
+		s.mu.RLock()
+		tm := s.taskMgr
+		s.mu.RUnlock()
+		if tm != nil {
+			close(tm.done)
+		}
+	})
+}
 
 // Sessions returns the session manager for inspecting active sessions.
 func (s *Server) Sessions() *SessionManager { return s.sessions }
@@ -467,36 +484,25 @@ func (s *Server) handleToolsCall(parent *Context, msg *jsonrpcMessage) *jsonrpcM
 	c.session = s.sessions.GetOrCreate(sessionID)
 
 	var result *CallToolResult
+	var handlerErr error
 
 	// safety net: recover panics even without Recovery middleware
 	func() {
 		defer func() {
 			if r := recover(); r != nil {
 				s.logger.Error("unrecovered panic in tool handler", "tool", params.Name, "panic", fmt.Sprintf("%v", r))
-				c.Set("_panic", fmt.Sprintf("internal error: %v", r))
+				handlerErr = fmt.Errorf("internal error: %v", r)
 			}
 		}()
-		err := executeChain(c, nil, func() error {
-			var handlerErr error
-			result, handlerErr = entry.handler(c)
-			return handlerErr
+		handlerErr = executeChain(c, nil, func() error {
+			var err error
+			result, err = entry.handler(c)
+			return err
 		})
-		if err != nil {
-			c.Set("_chain_error", err.Error())
-		}
 	}()
 
-	// panic recovered → friendly error result
-	if panicMsg, ok := c.Get("_panic"); ok {
-		if s, ok := panicMsg.(string); ok {
-			return newResponse(msg.ID, ErrorResult(s))
-		}
-	}
-
-	if errMsg, ok := c.Get("_chain_error"); ok {
-		if s, ok := errMsg.(string); ok {
-			return newResponse(msg.ID, ErrorResult(s))
-		}
+	if handlerErr != nil {
+		return newResponse(msg.ID, ErrorResult(handlerErr.Error()))
 	}
 	if result == nil {
 		result = &CallToolResult{}

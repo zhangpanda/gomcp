@@ -42,6 +42,7 @@ type taskManager struct {
 	tasks   sync.Map
 	sem     chan struct{} // concurrency limiter
 	taskTTL time.Duration
+	done    chan struct{}
 }
 
 func newTaskManager(maxConcurrent int) *taskManager {
@@ -51,6 +52,7 @@ func newTaskManager(maxConcurrent int) *taskManager {
 	tm := &taskManager{
 		sem:     make(chan struct{}, maxConcurrent),
 		taskTTL: 10 * time.Minute,
+		done:    make(chan struct{}),
 	}
 	go tm.evictLoop()
 	return tm
@@ -59,22 +61,27 @@ func newTaskManager(maxConcurrent int) *taskManager {
 func (tm *taskManager) evictLoop() {
 	ticker := time.NewTicker(time.Minute)
 	defer ticker.Stop()
-	for range ticker.C {
-		now := time.Now()
-		tm.tasks.Range(func(key, value any) bool {
-			t, ok := value.(*task)
-			if !ok {
+	for {
+		select {
+		case <-tm.done:
+			return
+		case <-ticker.C:
+			now := time.Now()
+			tm.tasks.Range(func(key, value any) bool {
+				t, ok := value.(*task)
+				if !ok {
+					return true
+				}
+				t.mu.Lock()
+				done := t.Status != TaskRunning
+				age := now.Sub(t.CreatedAt)
+				t.mu.Unlock()
+				if done && age > tm.taskTTL {
+					tm.tasks.Delete(key)
+				}
 				return true
-			}
-			t.mu.Lock()
-			done := t.Status != TaskRunning
-			age := now.Sub(t.CreatedAt)
-			t.mu.Unlock()
-			if done && age > tm.taskTTL {
-				tm.tasks.Delete(key)
-			}
-			return true
-		})
+			})
+		}
 	}
 }
 
@@ -158,7 +165,8 @@ func (s *Server) AsyncTool(name, description string, handler HandlerFunc, opts .
 		// capture args and logger for the async goroutine
 		args := ctx.Args()
 		logger := ctx.Logger()
-		id := s.taskMgr.submit(name, ctx.Context(), func(taskCtx context.Context) (*CallToolResult, error) {
+		// Use background context: request context is cancelled after HTTP response is sent.
+		id := s.taskMgr.submit(name, context.Background(), func(taskCtx context.Context) (*CallToolResult, error) {
 			asyncCtx := newContext(taskCtx, args, logger)
 			return handler(asyncCtx)
 		})
@@ -192,7 +200,7 @@ func (s *Server) AsyncToolFunc(name, description string, fn any, opts ...ToolOpt
 		entry.handler = func(ctx *Context) (*CallToolResult, error) {
 			args := ctx.Args()
 			logger := ctx.Logger()
-			id := s.taskMgr.submit(name, ctx.Context(), func(taskCtx context.Context) (*CallToolResult, error) {
+			id := s.taskMgr.submit(name, context.Background(), func(taskCtx context.Context) (*CallToolResult, error) {
 				asyncCtx := newContext(taskCtx, args, logger)
 				return original(asyncCtx)
 			})
@@ -210,20 +218,15 @@ func (s *Server) ensureTaskManager() {
 	}
 }
 
-// SetMaxConcurrentTasks sets the max concurrent async tasks. Prefer calling
-// this before the first [Server.AsyncTool] or [Server.AsyncToolFunc].
-// If a task manager already exists, only the semaphore is replaced;
-// in-flight tasks remain accessible.
+// SetMaxConcurrentTasks sets the max concurrent async tasks.
+// Must be called before the first [Server.AsyncTool] or [Server.AsyncToolFunc].
+// If a task manager already exists, this is a no-op to avoid race conditions
+// with in-flight tasks.
 func (s *Server) SetMaxConcurrentTasks(n int) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.taskMgr == nil {
 		s.taskMgr = newTaskManager(n)
-	} else {
-		if n <= 0 {
-			n = 100
-		}
-		s.taskMgr.sem = make(chan struct{}, n)
 	}
 }
 

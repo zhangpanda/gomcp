@@ -10,10 +10,13 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/zhangpanda/gomcp"
 	"gopkg.in/yaml.v3"
 )
+
+var openAPIHTTPClient = &http.Client{Timeout: 30 * time.Second}
 
 // OpenAPIOptions controls OpenAPI import behavior.
 type OpenAPIOptions struct {
@@ -132,13 +135,19 @@ func callOpenAPI(baseURL, method, path string, op openAPIOperation, spec *openAP
 		req.Header.Set("Authorization", "Bearer "+authToken)
 	}
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := openAPIHTTPClient.Do(req)
 	if err != nil {
 		return gomcp.ErrorResult("http error: " + err.Error()), nil
 	}
 	defer func() { _ = resp.Body.Close() }()
 
-	respBody, _ := io.ReadAll(resp.Body)
+	const maxResponseSize = 10 << 20 // 10MB
+	respBody, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseSize))
+	if err != nil {
+		return gomcp.ErrorResult("read error: " + err.Error()), nil
+	}
+	// Drain remainder so keep-alive connections stay reusable.
+	_, _ = io.Copy(io.Discard, resp.Body)
 	if resp.StatusCode >= 400 {
 		return gomcp.ErrorResult(fmt.Sprintf("HTTP %d: %s", resp.StatusCode, string(respBody))), nil
 	}

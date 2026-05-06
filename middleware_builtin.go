@@ -32,7 +32,6 @@ func Recovery() Middleware {
 			if r := recover(); r != nil {
 				msg := fmt.Sprintf("internal error: %v", r)
 				ctx.Logger().Error("panic recovered", "panic", fmt.Sprintf("%v", r))
-				ctx.Set("_panic", msg)
 				retErr = fmt.Errorf("%s", msg)
 			}
 		}()

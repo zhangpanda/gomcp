@@ -59,21 +59,26 @@ func (s *Server) handleComplete(msg *jsonrpcMessage) *jsonrpcMessage {
 	}
 
 	s.mu.RLock()
-	defer s.mu.RUnlock()
-
+	var handler CompletionHandler
 	for _, c := range s.completions {
 		if c.refType == params.Ref.Type && c.refName == params.Ref.Name && c.argName == params.Argument.Name {
-			values := c.handler(params.Argument.Value)
-			if len(values) > 100 {
-				return newResponse(msg.ID, completeResult{
-					Completion: completeValues{Values: values[:100], HasMore: true, Total: len(values)},
-				})
-			}
-			return newResponse(msg.ID, completeResult{
-				Completion: completeValues{Values: values, Total: len(values)},
-			})
+			handler = c.handler
+			break
 		}
 	}
+	s.mu.RUnlock()
 
-	return newResponse(msg.ID, completeResult{Completion: completeValues{Values: []string{}}})
+	if handler == nil {
+		return newResponse(msg.ID, completeResult{Completion: completeValues{Values: []string{}}})
+	}
+
+	values := handler(params.Argument.Value)
+	if len(values) > 100 {
+		return newResponse(msg.ID, completeResult{
+			Completion: completeValues{Values: values[:100], HasMore: true, Total: len(values)},
+		})
+	}
+	return newResponse(msg.ID, completeResult{
+		Completion: completeValues{Values: values, Total: len(values)},
+	})
 }

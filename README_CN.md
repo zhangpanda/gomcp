@@ -99,6 +99,7 @@ MCP 是 Anthropic 发布的开放协议，让 AI 应用（Claude Desktop、Curso
 - **MCP Inspector** — 内置 Web 调试界面，浏览和测试工具
 - **热加载** — 从 YAML 文件加载工具定义，支持文件监听
 - **mcptest 包** — 内存级测试客户端，支持快照测试
+- **生命周期** — `Close()`、会话空闲清理、异步并发上限 — 详见 [**Server 生命周期、会话与异步任务**](#server-lifecycle)。
 
 ---
 
@@ -336,6 +337,15 @@ s.AsyncTool("report", "生成报告", handler)
 ```go
 s.LoadDir("./tools/", gomcp.DirOptions{Watch: true})
 ```
+
+<a id="server-lifecycle"></a>
+
+### Server 生命周期、会话与异步任务
+
+- **`Server.Close()`** — 若使用了 **`LoadDir(..., Watch: true)`** 或长时间运行的 HTTP 服务，在进程退出或测试收尾时应调用一次 **`Close()`**：会结束 YAML 目录轮询、**会话驱逐**后台循环，以及**异步任务管理器**的驱逐循环。可**重复调用**（幂等）。
+- **会话（Session）** — 会话数据仅在**内存**中；Streamable HTTP 下由客户端 `Mcp-Session-Id` 关联。**超过 30 分钟**未再访问的会话会被**清理**；客户端若仍持旧 ID，下次会得到**新的空会话**。若业务依赖会话内状态，需避免长时间无请求，或自行恢复状态。
+- **`SetMaxConcurrentTasks(n)`** — 请在首次注册 **`AsyncTool` / `AsyncToolFunc` 之前**调用。内部 task manager 一旦创建，后续再调该方法为 **no-op**（避免与进行中的任务产生竞态）。
+- **关闭与异步任务** — `Close()` **不会**等待仍在执行的异步工具 handler；若进程退出前必须跑完任务，需在外层自行做**超时与等待**。
 
 ### MCP Inspector
 

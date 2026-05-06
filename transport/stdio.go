@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"os/signal"
+	"slices"
 	"syscall"
 )
 
@@ -37,11 +38,13 @@ func serveIO(ctx context.Context, r io.Reader, w io.Writer, handler MessageHandl
 			continue
 		}
 
-		resp := handler(ctx, line)
+		// Slice copy: scanner buffer is reused across Scan iterations.
+		msg := slices.Clone(line)
+
+		resp := handler(ctx, msg)
 		if resp == nil {
 			continue
 		}
-
 		out := make([]byte, len(resp)+1)
 		copy(out, resp)
 		out[len(resp)] = '\n'

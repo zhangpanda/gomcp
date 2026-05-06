@@ -22,6 +22,8 @@ type HTTPServer struct {
 	MaxRequestSize int64                    // 0 means default 10MB
 	// ValidateSSE is invoked before subscribing an SSE client; return non-nil to reject with 401.
 	ValidateSSE func(*http.Request) error
+	// Logger for transport-level events. Nil disables logging.
+	Logger func(msg string, args ...any)
 }
 
 // NewHTTPServer creates a Streamable HTTP transport.
@@ -49,7 +51,10 @@ func (s *HTTPServer) Notify(method string, params any) {
 	for ch := range s.clients {
 		select {
 		case ch <- event:
-		default: // drop if client is slow
+		default:
+			if s.Logger != nil {
+				s.Logger("SSE message dropped for slow client", "method", method)
+			}
 		}
 	}
 }
