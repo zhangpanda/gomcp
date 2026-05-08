@@ -51,6 +51,8 @@ MCP is the open protocol that lets AI applications (Claude Desktop, Cursor, Kiro
 | **Go** | ≥ 1.25 |
 | **MCP Protocol** | 2024-11-05 (backward compatible with 2025-11-25) |
 
+> **Note on the Go 1.25 requirement.** GoMCP's `go.mod` declares `go 1.25.0` so the project always builds with the toolchain that ships current security and runtime fixes. If you are running Go 1.21+ locally with the default `GOTOOLCHAIN=auto`, Go will automatically download and use the matching toolchain for you — no manual upgrade is needed. If you have pinned `GOTOOLCHAIN=local`, install Go 1.25+ or unset the pin.
+
 ### Core Dependencies
 
 | Technology | Description |
