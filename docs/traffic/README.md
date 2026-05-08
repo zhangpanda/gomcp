@@ -74,35 +74,51 @@ For clones, the inner array is named `"clones"` instead of `"views"`.
 See the [GitHub REST API docs](https://docs.github.com/en/rest/metrics/traffic)
 for field definitions.
 
-## Permissions
+## Setup (required before first run)
 
-The Traffic API requires **push access** to the repository. The workflow
-uses the default `GITHUB_TOKEN` with `contents: write`, which includes
-push access and is normally sufficient.
+The Traffic API is **not accessible** via the built-in `GITHUB_TOKEN`.
+GitHub rejects all GitHub App tokens on the Traffic endpoints with HTTP
+403 `Resource not accessible by integration`, regardless of which
+`permissions:` scopes are declared in the workflow. You must create a
+Personal Access Token and add it as a repository secret before enabling
+this archive.
 
-### For this repo (user-owned: `zhangpanda/gomcp`)
+### Create the PAT
 
-No extra setup needed. The default `GITHUB_TOKEN` works.
+Pick one:
 
-### Fallback: Personal Access Token
-
-If a workflow run fails on the `Fetch traffic data` step with
-`Resource not accessible by integration` or `HTTP 403`, switch to a
-Personal Access Token:
+**Option A — Fine-grained PAT (recommended):**
 
 1. Go to **GitHub → Settings → Developer settings → Personal access
-   tokens → Fine-grained tokens** (recommended) or **Tokens (classic)**.
-2. Create a token with:
-   - **Fine-grained:** Repository access = `zhangpanda/gomcp`,
-     Permissions = `Administration: Read-only`, `Metadata: Read-only`,
-     `Contents: Read & write` (to commit).
-   - **Classic:** `repo` scope.
-3. Add it to this repository's secrets:
-   **Settings → Secrets and variables → Actions → New repository secret**
-   with the name `TRAFFIC_TOKEN`.
+   tokens → Fine-grained tokens → Generate new token**.
+2. **Resource owner:** `zhangpanda`.
+3. **Repository access:** *Only select repositories* → `zhangpanda/gomcp`.
+4. **Permissions:**
+   - `Administration: Read-only`
+   - `Metadata: Read-only`
+5. Generate and copy the token (`github_pat_…`).
 
-The workflow auto-detects `TRAFFIC_TOKEN` and uses it in preference to
-`GITHUB_TOKEN`.
+**Option B — Classic PAT:**
+
+1. Go to **GitHub → Settings → Developer settings → Personal access
+   tokens → Tokens (classic) → Generate new token**.
+2. **Scope:** `repo` (full).
+3. Generate and copy the token (`ghp_…`).
+
+### Add the secret
+
+1. In the `zhangpanda/gomcp` repo, go to **Settings → Secrets and
+   variables → Actions → New repository secret**.
+2. **Name:** `TRAFFIC_TOKEN`
+3. **Value:** paste the PAT.
+
+### Verify
+
+Trigger a manual run from **Actions → Traffic archive → Run workflow**.
+If everything is set up correctly, you'll see 4 new files committed
+under `docs/traffic/data/`. If the run fails with HTTP 403 in the
+`Fetch traffic data` step, the PAT is missing the `Administration` /
+`repo` permission.
 
 ## Analysing the archive
 
