@@ -48,12 +48,18 @@ func (s *Server) LoadDir(dir string, opts DirOptions) error {
 		opts.Interval = 2 * time.Second
 	}
 
-	if err := s.loadToolFilesSimple(dir, opts.Pattern); err != nil {
+	loaded, err := s.loadToolFiles(dir, opts.Pattern)
+	if err != nil {
 		return err
 	}
 
 	if opts.Watch {
-		go s.watchDir(dir, opts)
+		// Pass the initial loaded set so watchDir knows which tools it
+		// owns; otherwise a delete of a file loaded at startup looked
+		// like a "no-op change" — prevTools started empty, so the
+		// deletion loop iterated nothing and the list_changed notify
+		// never fired.
+		go s.watchDir(dir, opts, loaded)
 	}
 	return nil
 }
@@ -117,17 +123,18 @@ func (s *Server) registerToolDef(def toolDef) {
 	s.RegisterToolRaw(def.Name, def.Description, inputSchema, handler, opts...)
 }
 
-func (s *Server) loadToolFilesSimple(dir, pattern string) error {
-	_, err := s.loadToolFiles(dir, pattern)
-	return err
-}
-
 var providerHTTPClient = &http.Client{Timeout: 30 * time.Second}
 
 func callHTTPHandler(url, method string, ctx *Context) (*CallToolResult, error) {
 	var bodyReader io.Reader
 	if method == "POST" || method == "PUT" || method == "PATCH" {
-		data, _ := json.Marshal(ctx.Args())
+		data, err := json.Marshal(ctx.Args())
+		if err != nil {
+			// Silently swallowing this used to turn unserialisable args
+			// (channels, funcs, cyclic pointers) into empty-body POSTs
+			// that confused downstream services.
+			return ErrorResult("marshal args: " + err.Error()), nil
+		}
 		bodyReader = bytes.NewReader(data)
 	}
 
@@ -166,7 +173,7 @@ func callHTTPHandler(url, method string, ctx *Context) (*CallToolResult, error) 
 	return TextResult(string(body)), nil
 }
 
-func (s *Server) watchDir(dir string, opts DirOptions) {
+func (s *Server) watchDir(dir string, opts DirOptions, prevTools map[string]bool) {
 	// simple polling watcher — tracks file mod times and loaded tool names
 	snapshot := func() map[string]time.Time {
 		m := make(map[string]time.Time)
@@ -178,7 +185,9 @@ func (s *Server) watchDir(dir string, opts DirOptions) {
 		}
 		return m
 	}
-	prevTools := make(map[string]bool) // tools loaded from previous cycle
+	if prevTools == nil {
+		prevTools = make(map[string]bool)
+	}
 	modTimes := snapshot()
 
 	ticker := time.NewTicker(opts.Interval)
@@ -203,14 +212,21 @@ func (s *Server) watchDir(dir string, opts DirOptions) {
 		if changed {
 			s.logger.Info("tool files changed, reloading", "dir", dir)
 			loaded, _ := s.loadToolFiles(dir, opts.Pattern)
-			// Remove tools that were in the previous load but not in the current one
+			// Remove tools that were in the previous load but not in the current one.
+			// loadToolFiles itself already notifies for adds/updates via registerTool;
+			// we mirror that here for deletes so clients see the change.
+			var deleted int
 			s.mu.Lock()
 			for name := range prevTools {
 				if !loaded[name] {
 					delete(s.tools, name)
+					deleted++
 				}
 			}
 			s.mu.Unlock()
+			if deleted > 0 {
+				s.notify("notifications/tools/list_changed")
+			}
 			prevTools = loaded
 			modTimes = current
 			if opts.OnReload != nil {

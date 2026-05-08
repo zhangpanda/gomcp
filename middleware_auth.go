@@ -10,10 +10,12 @@ import (
 	"github.com/zhangpanda/gomcp/transport"
 )
 
-// auth context keys
+// auth context keys — imported from transport so both sides use one
+// declaration. Previously these were string literals declared in two
+// places; any drift silently broke auth header injection.
 const (
-	ctxKeyAuthHeader transport.CtxKey = "auth_header"
-	ctxKeyHeaders    transport.CtxKey = "http_headers"
+	ctxKeyAuthHeader = transport.CtxKeyAuthHeader
+	ctxKeyHeaders    = transport.CtxKeyHeaders
 )
 
 // WithAuthHeader injects an Authorization header value into a context.
@@ -168,14 +170,29 @@ func BasicAuthSkipHandshake(validate func(username, password string) (map[string
 type KeyValidator func(key string) (meta map[string]any, err error)
 
 // APIKeyAuth returns a middleware that validates API keys.
-// It checks the header specified by headerName (e.g. "X-API-Key"),
-// falling back to the "api_key" argument merged from tools/call arguments,
-// prompts/get arguments, or resources/read params (see mergedArgsForMiddleware).
+//
+// The key is sourced from:
+//  1. The header specified by headerName (e.g. "X-API-Key"), which is the
+//     normal and recommended path.
+//  2. Otherwise, the "api_key" argument merged from tools/call arguments,
+//     prompts/get arguments, or resources/read params (see
+//     [mergedArgsForMiddleware]).
+//
+// Reading the key from tool arguments is supported for MCP clients that
+// cannot easily set HTTP headers, but it has a security caveat: tool
+// arguments are visible to any middleware earlier in the chain (including
+// [Logger], which can end up writing the key to logs). This middleware
+// therefore deletes "api_key" from the request's argument map after a
+// successful validation so downstream middleware and handlers do not
+// observe the secret. If you must not use the argument fallback at all,
+// prefer [SSEAPIKeyAuth] or a custom header-only check.
 func APIKeyAuth(headerName string, validate KeyValidator) Middleware {
 	return func(ctx *Context, next func() error) error {
 		key := getHeader(ctx, headerName)
+		fromArgs := false
 		if key == "" {
 			key = ctx.String("api_key")
+			fromArgs = key != ""
 		}
 		if key == "" {
 			return authError("missing API key")
@@ -183,6 +200,13 @@ func APIKeyAuth(headerName string, validate KeyValidator) Middleware {
 		meta, err := validate(key)
 		if err != nil {
 			return authError("invalid API key: " + err.Error())
+		}
+		if fromArgs {
+			// Strip the key from the live argument map so Logger /
+			// handler / downstream middleware never see it.
+			if args := ctx.Args(); args != nil {
+				delete(args, "api_key")
+			}
 		}
 		if meta != nil {
 			ctx.Set("_auth_claims", meta)

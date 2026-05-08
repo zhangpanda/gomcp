@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"github.com/zhangpanda/gomcp/schema"
 	"github.com/zhangpanda/gomcp/transport"
@@ -47,7 +48,11 @@ type Server struct {
 	maxRequestSize    int64                     // default 10MB
 	sseValidate       func(*http.Request) error // optional SSE (GET) gate for Streamable HTTP
 	closeOnce         sync.Once
-	done              chan struct{} // closed by Close() to stop background goroutines
+	// closed is flipped to true under closeOnce.Do so that post-Close
+	// helpers (e.g. ensureTaskManager) become no-ops. Plain atomic lets
+	// them check without touching s.mu.
+	closed atomic.Bool
+	done   chan struct{} // closed by Close() to stop background goroutines
 }
 
 // Option configures the Server.
@@ -89,16 +94,20 @@ func New(name, version string, opts ...Option) *Server {
 
 // Close stops background work tied to the server: the session manager eviction loop,
 // the signal used by LoadDir(Watch: true), and the async task manager eviction loop.
+// Close stops background work tied to the server: the session manager eviction loop,
+// the signal used by LoadDir(Watch: true), and the async task manager (including
+// any in-flight AsyncTool handlers — their contexts are cancelled via taskMgr.rootCancel).
 // It is idempotent. It does not wait for in-flight AsyncTool handlers to finish.
 func (s *Server) Close() {
 	s.closeOnce.Do(func() {
+		s.closed.Store(true)
 		close(s.done)
 		s.sessions.close()
 		s.mu.RLock()
 		tm := s.taskMgr
 		s.mu.RUnlock()
 		if tm != nil {
-			close(tm.done)
+			tm.close()
 		}
 	})
 }
@@ -181,6 +190,15 @@ func (s *Server) RegisterToolRaw(name, description string, inputSchema JSONSchem
 // ToolFunc registers a tool using a typed function.
 // Signature: func(*Context, InputStruct) (OutputType, error)
 func (s *Server) ToolFunc(name, description string, fn any, opts ...ToolOption) {
+	entry := s.buildTypedToolEntry(name, description, fn)
+	s.registerTool(name, entry, opts)
+}
+
+// buildTypedToolEntry reflects on fn, validates its signature, and builds
+// a toolEntry with a schema-aware handler — but does not register it.
+// Shared by [Server.ToolFunc] and [Server.AsyncToolFunc] so the latter
+// can apply its async wrapper and register atomically under one lock.
+func (s *Server) buildTypedToolEntry(name, description string, fn any) toolEntry {
 	fv := reflect.ValueOf(fn)
 	ft := fv.Type()
 	if ft.Kind() != reflect.Func || ft.NumIn() != 2 || ft.NumOut() != 2 {
@@ -214,12 +232,11 @@ func (s *Server) ToolFunc(name, description string, fn any, opts ...ToolOption) 
 		return toResult(results[0].Interface()), nil
 	}
 
-	entry := toolEntry{
+	return toolEntry{
 		info:      ToolInfo{Name: name, Description: description, InputSchema: inputSchema},
 		handler:   handler,
 		schemaRes: &schemaRes,
 	}
-	s.registerTool(name, entry, opts)
 }
 
 // bumpVersionLatestLocked records the latest semver among keys "base@*" for a given base.
@@ -390,7 +407,7 @@ func (s *Server) handleRequestInternal(ctx context.Context, msg *jsonrpcMessage)
 func (s *Server) dispatchMethod(base *Context, msg *jsonrpcMessage) *jsonrpcMessage {
 	switch msg.Method {
 	case "initialize":
-		return s.handleInitialize(msg)
+		return s.handleInitialize(base, msg)
 	case "ping":
 		return newResponse(msg.ID, map[string]any{})
 	case "tools/list":
@@ -418,7 +435,7 @@ func (s *Server) dispatchMethod(base *Context, msg *jsonrpcMessage) *jsonrpcMess
 	}
 }
 
-func (s *Server) handleInitialize(msg *jsonrpcMessage) *jsonrpcMessage {
+func (s *Server) handleInitialize(base *Context, msg *jsonrpcMessage) *jsonrpcMessage {
 	caps := ServerCapabilities{Tools: &ToolCapability{ListChanged: true}}
 
 	s.mu.RLock()
@@ -431,6 +448,16 @@ func (s *Server) handleInitialize(msg *jsonrpcMessage) *jsonrpcMessage {
 	}
 	if hasPrompts {
 		caps.Prompts = &PromptCapability{ListChanged: true}
+	}
+
+	// MCP Streamable HTTP spec: the server MAY assign a session ID at
+	// initialize time by returning Mcp-Session-Id on the response. We
+	// always do so here — clients that don't want sessions can simply
+	// ignore the header.
+	if sink := transport.SessionIDFromContext(base.ctx); sink != nil {
+		sessionID := transport.LookupHeader(base.ctx, "Mcp-Session-Id")
+		sess := s.sessions.GetOrCreate(sessionID)
+		sink.Set(sess.ID)
 	}
 
 	return newResponse(msg.ID, InitializeResult{
@@ -469,19 +496,36 @@ func (s *Server) handleToolsCall(parent *Context, msg *jsonrpcMessage) *jsonrpcM
 		return newErrorResponse(msg.ID, -32001, "tool not found: "+params.Name)
 	}
 
+	// Use the args map that just flowed through middleware so any
+	// mutation done there (e.g. APIKeyAuth stripping api_key after
+	// validation) is visible to schema validation and the handler.
+	// Fall back to the freshly unmarshalled map if the middleware layer
+	// produced no args (e.g. notifications or custom dispatch paths).
+	args := parent.Args()
+	if len(args) == 0 && params.Arguments != nil {
+		args = params.Arguments
+	}
+
 	// validate parameters if schema available
 	if entry.schemaRes != nil {
-		if err := schema.Validate(params.Arguments, *entry.schemaRes); err != nil {
+		if err := schema.Validate(args, *entry.schemaRes); err != nil {
 			return newResponse(msg.ID, ErrorResult("validation failed: "+err.Error()))
 		}
 	}
 
-	c := forkContext(parent, params.Arguments, s.logger.With("tool", params.Name))
+	c := forkContext(parent, args, s.logger.With("tool", params.Name))
 	c.Set("_tool_name", params.Name)
 
 	// attach session (header name matched case-insensitively, like net/http)
 	sessionID := transport.LookupHeader(c.ctx, "Mcp-Session-Id")
 	c.session = s.sessions.GetOrCreate(sessionID)
+	// Advertise the session ID so the HTTP transport can return it as
+	// the Mcp-Session-Id response header. Without this, clients that
+	// don't bring their own session ID never learn one and effectively
+	// get a fresh session per request.
+	if sink := transport.SessionIDFromContext(c.ctx); sink != nil {
+		sink.Set(c.session.ID)
+	}
 
 	var result *CallToolResult
 	var handlerErr error

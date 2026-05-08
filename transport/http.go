@@ -9,12 +9,7 @@ import (
 	"time"
 )
 
-type transportCtxKey = CtxKey
-
-// CtxKey is the context key type used by transport to inject HTTP metadata.
-type CtxKey string
-
-// HTTPServer serves MCP over Streamable HTTP (POST for requests, GET for SSE notifications).
+// HTTPServer serves MCP over Streamable HTTP: POST for requests, GET for SSE notifications.
 type HTTPServer struct {
 	handler        MessageHandler
 	mu             sync.Mutex
@@ -24,6 +19,10 @@ type HTTPServer struct {
 	ValidateSSE func(*http.Request) error
 	// Logger for transport-level events. Nil disables logging.
 	Logger func(msg string, args ...any)
+	// SSEHeartbeat is the interval between SSE keepalive comments. The
+	// default (0) uses 25 seconds, which sits comfortably inside the
+	// common 60s proxy idle-timeout. Set to a negative value to disable.
+	SSEHeartbeat time.Duration
 }
 
 // NewHTTPServer creates a Streamable HTTP transport.
@@ -83,6 +82,19 @@ func (s *HTTPServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// heartbeatInterval resolves the configured interval, applying the default
+// and treating a negative value as disabled.
+func (s *HTTPServer) heartbeatInterval() time.Duration {
+	switch {
+	case s.SSEHeartbeat < 0:
+		return 0
+	case s.SSEHeartbeat == 0:
+		return 25 * time.Second
+	default:
+		return s.SSEHeartbeat
+	}
+}
+
 func (s *HTTPServer) handleSSE(w http.ResponseWriter, r *http.Request) {
 	if s.ValidateSSE != nil {
 		if err := s.ValidateSSE(r); err != nil {
@@ -106,10 +118,27 @@ func (s *HTTPServer) handleSSE(w http.ResponseWriter, r *http.Request) {
 	s.addClient(ch)
 	defer s.removeClient(ch)
 
+	// SSE comment frames (starting with ":") are ignored by clients per
+	// the SSE spec — they exist purely to keep intermediaries from
+	// closing an idle connection.
+	var heartbeatC <-chan time.Time
+	if iv := s.heartbeatInterval(); iv > 0 {
+		t := time.NewTicker(iv)
+		defer t.Stop()
+		heartbeatC = t.C
+	}
+
 	for {
 		select {
 		case event := <-ch:
-			_, _ = w.Write(event)
+			if _, err := w.Write(event); err != nil {
+				return
+			}
+			flusher.Flush()
+		case <-heartbeatC:
+			if _, err := w.Write([]byte(": heartbeat\n\n")); err != nil {
+				return
+			}
 			flusher.Flush()
 		case <-r.Context().Done():
 			return
@@ -133,16 +162,25 @@ func (s *HTTPServer) handlePost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// inject HTTP headers into context for auth middleware
+	// Inject HTTP headers into context for auth middleware.
 	ctx := r.Context()
 	if auth := r.Header.Get("Authorization"); auth != "" {
-		ctx = context.WithValue(ctx, transportCtxKey("auth_header"), auth)
+		ctx = context.WithValue(ctx, CtxKeyAuthHeader, auth)
 	}
 	headers := make(map[string]string)
 	for k := range r.Header {
 		headers[http.CanonicalHeaderKey(k)] = r.Header.Get(k)
 	}
-	ctx = context.WithValue(ctx, transportCtxKey("http_headers"), headers)
+	ctx = context.WithValue(ctx, CtxKeyHeaders, headers)
+
+	// Attach a sink so the server can advertise a newly-assigned MCP
+	// session ID back to the client. If the request already carries
+	// Mcp-Session-Id, pre-seed the sink with it so we preserve the
+	// value in the response.
+	ctx, sink := WithSessionIDSink(ctx)
+	if inSid := r.Header.Get("Mcp-Session-Id"); inSid != "" {
+		sink.Set(inSid)
+	}
 
 	msgs, isBatch := ParseBatch(body)
 
@@ -152,6 +190,12 @@ func (s *HTTPServer) handlePost(w http.ResponseWriter, r *http.Request) {
 		if resp != nil {
 			responses = append(responses, resp)
 		}
+	}
+
+	// Emit the session ID before WriteHeader. Writing a response body or
+	// calling WriteHeader first locks in the header set.
+	if id := sink.Get(); id != "" {
+		w.Header().Set("Mcp-Session-Id", id)
 	}
 
 	if len(responses) == 0 {

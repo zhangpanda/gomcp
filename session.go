@@ -14,6 +14,10 @@ type Session struct {
 	mu         sync.RWMutex
 	store      map[string]any
 	lastAccess time.Time
+	// evicted is set by the SessionManager under s.mu (write) before
+	// removing the entry from the map; touch() checks it so a session
+	// that has just been evicted cannot silently come back to life.
+	evicted bool
 }
 
 func newSession() *Session {
@@ -26,11 +30,17 @@ func newSession() *Session {
 	}
 }
 
-// touch records session activity for TTL eviction.
-func (s *Session) touch() {
+// touch records session activity for TTL eviction. Returns false if the
+// session has been evicted — callers should treat that as "session
+// missing" and create a fresh one.
+func (s *Session) touch() bool {
 	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.evicted {
+		return false
+	}
 	s.lastAccess = time.Now()
-	s.mu.Unlock()
+	return true
 }
 
 // Set stores a value in the session.
@@ -73,22 +83,45 @@ func (sm *SessionManager) evictLoop() {
 		case <-sm.done:
 			return
 		case <-ticker.C:
-			now := time.Now()
-			sm.sessions.Range(func(key, value any) bool {
-				s, ok := value.(*Session)
-				if !ok {
-					return true
-				}
-				s.mu.RLock()
-				idle := now.Sub(s.lastAccess) > sm.ttl
-				s.mu.RUnlock()
-				if idle {
-					sm.sessions.Delete(key)
-				}
-				return true
-			})
+			sm.evictIdle(time.Now())
 		}
 	}
+}
+
+// evictIdle walks the session map and removes entries that have been
+// idle for longer than the TTL. The check and removal are held under
+// the session's own write lock to eliminate the classic race:
+//
+//  1. evictLoop reads lastAccess under RLock, finds it stale
+//  2. evictLoop releases RLock
+//  3. user touch() under Lock updates lastAccess to now
+//  4. evictLoop deletes the entry anyway, silently losing the session
+//
+// By holding Lock through CompareAndDelete, touch() is serialised: if
+// touch wins, we see the new lastAccess and skip delete; if we win,
+// touch returns false and the caller creates a fresh session.
+//
+// Exported as a method (lowercase) so regression tests can exercise it
+// deterministically instead of waiting for the ticker.
+func (sm *SessionManager) evictIdle(now time.Time) {
+	sm.sessions.Range(func(key, value any) bool {
+		s, ok := value.(*Session)
+		if !ok {
+			return true
+		}
+		s.mu.Lock()
+		idle := now.Sub(s.lastAccess) > sm.ttl
+		if idle {
+			s.evicted = true
+		}
+		s.mu.Unlock()
+		if idle {
+			// CompareAndDelete avoids wiping out a replacement session
+			// that a racing Get may have just stored under the same id.
+			sm.sessions.CompareAndDelete(key, s)
+		}
+		return true
+	})
 }
 
 func (sm *SessionManager) close() {
@@ -98,17 +131,20 @@ func (sm *SessionManager) close() {
 // Get returns an existing session or creates a new one for the given ID.
 func (sm *SessionManager) Get(id string) *Session {
 	if v, ok := sm.sessions.Load(id); ok {
-		if sess, ok := v.(*Session); ok {
-			sess.touch()
+		if sess, ok := v.(*Session); ok && sess.touch() {
 			return sess
 		}
+		// evicted between Load and touch — fall through and re-create.
 	}
 	s := newSession()
 	s.ID = id
-	actual, _ := sm.sessions.LoadOrStore(id, s)
-	if sess, ok := actual.(*Session); ok {
-		sess.touch()
-		return sess
+	actual, loaded := sm.sessions.LoadOrStore(id, s)
+	if loaded {
+		if sess, ok := actual.(*Session); ok && sess.touch() {
+			return sess
+		}
+		// The entry we found was evicted too. Force-replace it.
+		sm.sessions.Store(id, s)
 	}
 	return s
 }

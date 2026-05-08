@@ -43,19 +43,39 @@ type taskManager struct {
 	sem     chan struct{} // concurrency limiter
 	taskTTL time.Duration
 	done    chan struct{}
+	// rootCtx is the parent of every submitted task's context so that
+	// close() cancels all in-flight AsyncTool handlers. Previously tasks
+	// used context.Background() which leaked on Server.Close.
+	rootCtx    context.Context
+	rootCancel context.CancelFunc
 }
 
 func newTaskManager(maxConcurrent int) *taskManager {
 	if maxConcurrent <= 0 {
 		maxConcurrent = 100
 	}
+	rootCtx, rootCancel := context.WithCancel(context.Background())
 	tm := &taskManager{
-		sem:     make(chan struct{}, maxConcurrent),
-		taskTTL: 10 * time.Minute,
-		done:    make(chan struct{}),
+		sem:        make(chan struct{}, maxConcurrent),
+		taskTTL:    10 * time.Minute,
+		done:       make(chan struct{}),
+		rootCtx:    rootCtx,
+		rootCancel: rootCancel,
 	}
 	go tm.evictLoop()
 	return tm
+}
+
+// close cancels all in-flight task contexts and stops the eviction loop.
+// Idempotent.
+func (tm *taskManager) close() {
+	tm.rootCancel()
+	select {
+	case <-tm.done:
+		// already closed
+	default:
+		close(tm.done)
+	}
 }
 
 func (tm *taskManager) evictLoop() {
@@ -85,13 +105,18 @@ func (tm *taskManager) evictLoop() {
 	}
 }
 
-func (tm *taskManager) submit(toolName string, ctx context.Context, handler func(context.Context) (*CallToolResult, error)) string {
+// submit schedules handler to run with a cancellable context derived from
+// tm.rootCtx. The ctx argument is retained for API compatibility but
+// effectively only contributes values — deadlines/cancellation flow from
+// rootCtx so Server.Close can cancel every in-flight task.
+func (tm *taskManager) submit(toolName string, _ context.Context, handler func(context.Context) (*CallToolResult, error)) string {
 	id := uid.New()
-	taskCtx, cancel := context.WithCancel(ctx)
+	taskCtx, cancel := context.WithCancel(tm.rootCtx)
 	t := &task{ID: id, Tool: toolName, Status: TaskRunning, CreatedAt: time.Now(), cancel: cancel}
 	tm.tasks.Store(id, t)
 
 	go func() {
+		defer cancel() // ensure we always release the child context
 		// recover panics in async handlers
 		defer func() {
 			if r := recover(); r != nil {
@@ -160,13 +185,14 @@ func (tm *taskManager) cancel(id string) bool {
 
 // AsyncTool registers an async tool that returns a task ID immediately.
 func (s *Server) AsyncTool(name, description string, handler HandlerFunc, opts ...ToolOption) {
-	s.ensureTaskManager()
+	if !s.ensureTaskManager() {
+		return // server already closed
+	}
 	wrapper := func(ctx *Context) (*CallToolResult, error) {
 		// capture args and logger for the async goroutine
 		args := ctx.Args()
 		logger := ctx.Logger()
-		// Use background context: request context is cancelled after HTTP response is sent.
-		id := s.taskMgr.submit(name, context.Background(), func(taskCtx context.Context) (*CallToolResult, error) {
+		id := s.taskMgr.submit(name, ctx.Context(), func(taskCtx context.Context) (*CallToolResult, error) {
 			asyncCtx := newContext(taskCtx, args, logger)
 			return handler(asyncCtx)
 		})
@@ -177,45 +203,45 @@ func (s *Server) AsyncTool(name, description string, handler HandlerFunc, opts .
 
 // AsyncToolFunc registers an async typed tool.
 func (s *Server) AsyncToolFunc(name, description string, fn any, opts ...ToolOption) {
-	s.ensureTaskManager()
-	// Register normally first to get the schema-aware handler
-	s.ToolFunc(name, description, fn, opts...)
-
-	// Determine the exact key that was just registered
-	key := name
-	for _, o := range opts {
-		// Probe the option to find version
-		probe := &toolEntry{info: ToolInfo{Annotations: make(map[string]string)}}
-		o(probe)
-		if v, ok := probe.info.Annotations["version"]; ok && v != "" {
-			key = name + "@" + v
-		}
+	if !s.ensureTaskManager() {
+		return // server already closed
 	}
-
-	// Wrap only the exact tool that was just registered
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if entry, ok := s.tools[key]; ok {
-		original := entry.handler
-		entry.handler = func(ctx *Context) (*CallToolResult, error) {
-			args := ctx.Args()
-			logger := ctx.Logger()
-			id := s.taskMgr.submit(name, context.Background(), func(taskCtx context.Context) (*CallToolResult, error) {
-				asyncCtx := newContext(taskCtx, args, logger)
-				return original(asyncCtx)
-			})
-			return asyncTaskIDResult(id), nil
-		}
-		s.tools[key] = entry
+	// Build the schema-aware entry without registering yet, then wrap its
+	// handler with the async trampoline. This happens before we acquire
+	// s.mu so no window exists where the tool is callable with the raw
+	// sync handler — previously ToolFunc and the subsequent rewrite
+	// sat across two separate critical sections.
+	entry := s.buildTypedToolEntry(name, description, fn)
+	sync := entry.handler
+	entry.handler = func(ctx *Context) (*CallToolResult, error) {
+		args := ctx.Args()
+		logger := ctx.Logger()
+		id := s.taskMgr.submit(name, ctx.Context(), func(taskCtx context.Context) (*CallToolResult, error) {
+			asyncCtx := newContext(taskCtx, args, logger)
+			return sync(asyncCtx)
+		})
+		return asyncTaskIDResult(id), nil
 	}
+	s.registerTool(name, entry, opts)
 }
 
-func (s *Server) ensureTaskManager() {
+// ensureTaskManager lazily initialises s.taskMgr. Returns false if the
+// server has already been closed, in which case callers must not
+// register new async tools (their goroutines would leak because Close
+// already fired).
+func (s *Server) ensureTaskManager() bool {
+	if s.closed.Load() {
+		return false
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.closed.Load() {
+		return false
+	}
 	if s.taskMgr == nil {
 		s.taskMgr = newTaskManager(100)
 	}
+	return true
 }
 
 // SetMaxConcurrentTasks sets the max concurrent async tasks.
@@ -223,8 +249,14 @@ func (s *Server) ensureTaskManager() {
 // If a task manager already exists, this is a no-op to avoid race conditions
 // with in-flight tasks.
 func (s *Server) SetMaxConcurrentTasks(n int) {
+	if s.closed.Load() {
+		return
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.closed.Load() {
+		return
+	}
 	if s.taskMgr == nil {
 		s.taskMgr = newTaskManager(n)
 	}
