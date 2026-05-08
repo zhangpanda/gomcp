@@ -1,0 +1,73 @@
+# Archive GitHub Traffic statistics weekly.
+#
+# GitHub's built-in Traffic API only keeps the last 14 days of data. This
+# workflow snapshots the 4 Traffic endpoints every Monday and commits the
+# raw JSON into docs/traffic/data/ so that historical trends are preserved.
+#
+# See docs/traffic/README.md for details on the data format and the PAT
+# fallback if the default GITHUB_TOKEN doesn't have permission.
+
+name: Traffic archive
+
+on:
+  schedule:
+    # Every Monday at 02:00 UTC (10:00 Beijing).
+    - cron: '0 2 * * MON'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  # Required by the Traffic API. For user-owned repos this is granted to
+  # GITHUB_TOKEN when explicitly requested here. For org-owned repos or
+  # restricted setups, set a TRAFFIC_TOKEN secret as a fallback.
+  administration: read
+
+jobs:
+  archive:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+
+      - name: Fetch traffic data
+        env:
+          # Prefer TRAFFIC_TOKEN (PAT) when set; fall back to GITHUB_TOKEN.
+          GH_TOKEN: ${{ secrets.TRAFFIC_TOKEN || secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          DATE=$(date -u +%Y-%m-%d)
+          OUT_DIR="docs/traffic/data"
+          mkdir -p "$OUT_DIR"
+
+          for endpoint in views clones; do
+            echo "Fetching $endpoint ..."
+            gh api "repos/${REPO}/traffic/${endpoint}" \
+              > "${OUT_DIR}/${DATE}-${endpoint}.json"
+          done
+
+          for endpoint in popular/referrers popular/paths; do
+            name=$(echo "$endpoint" | tr '/' '-')
+            echo "Fetching $endpoint ..."
+            gh api "repos/${REPO}/traffic/${endpoint}" \
+              > "${OUT_DIR}/${DATE}-${name}.json"
+          done
+
+          echo "Archived files:"
+          ls -la "${OUT_DIR}/${DATE}"*
+
+      - name: Commit & push
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/traffic/
+          if git diff --cached --quiet; then
+            echo "No traffic changes to commit"
+            exit 0
+          fi
+          DATE=$(date -u +%Y-%m-%d)
+          git commit -m "chore(traffic): weekly archive ${DATE}"
+          git push
