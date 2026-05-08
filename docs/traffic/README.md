@@ -76,17 +76,17 @@ for field definitions.
 
 ## Permissions
 
-The Traffic API requires **admin / push access** to the repository. The
-workflow requests `administration: read` on the default `GITHUB_TOKEN`.
+The Traffic API requires **push access** to the repository. The workflow
+uses the default `GITHUB_TOKEN` with `contents: write`, which includes
+push access and is normally sufficient.
 
 ### For this repo (user-owned: `zhangpanda/gomcp`)
 
-The default `GITHUB_TOKEN` with `administration: read` permission should
-be sufficient. No extra setup needed.
+No extra setup needed. The default `GITHUB_TOKEN` works.
 
 ### Fallback: Personal Access Token
 
-If the workflow run fails with
+If a workflow run fails on the `Fetch traffic data` step with
 `Resource not accessible by integration` or `HTTP 403`, switch to a
 Personal Access Token:
 

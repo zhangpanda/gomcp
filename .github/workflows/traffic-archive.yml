@@ -16,11 +16,12 @@ on:
   workflow_dispatch:
 
 permissions:
+  # contents: write is enough for both committing the archive and calling
+  # the Traffic API — GITHUB_TOKEN with repo push access is accepted by
+  # the Traffic endpoints. If your setup rejects it (HTTP 403 "Resource
+  # not accessible by integration"), set a TRAFFIC_TOKEN secret instead;
+  # see docs/traffic/README.md for the fallback.
   contents: write
-  # Required by the Traffic API. For user-owned repos this is granted to
-  # GITHUB_TOKEN when explicitly requested here. For org-owned repos or
-  # restricted setups, set a TRAFFIC_TOKEN secret as a fallback.
-  administration: read
 
 jobs:
   archive:
