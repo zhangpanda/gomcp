@@ -29,10 +29,20 @@ type Result struct {
 	Required   []string
 }
 
+// schemaCache maps reflect.Type → Result. We only ever store *completed*
+// results here; the previous design wrote a sentinel before recursion
+// finished, which leaked half-built schemas to other goroutines that
+// happened to call Generate for the same type concurrently. Self-
+// reference handling now lives on the recursion stack via the visited
+// set in generateImpl, so the cache only needs completed entries.
 var schemaCache sync.Map // reflect.Type → Result
 
 // Generate produces schema properties and required list from a struct type.
 func Generate(t reflect.Type) Result {
+	return generateImpl(t, nil)
+}
+
+func generateImpl(t reflect.Type, visited map[reflect.Type]bool) Result {
 	if t.Kind() == reflect.Ptr {
 		t = t.Elem()
 	}
@@ -46,9 +56,21 @@ func Generate(t reflect.Type) Result {
 		}
 	}
 
-	// Store a sentinel before recursing to break self-referential cycles.
+	if visited == nil {
+		visited = make(map[reflect.Type]bool)
+	}
+	if visited[t] {
+		// Self- or cycle-reference within the current call tree. Returning
+		// an empty Result here is the correct response: JSON Schema
+		// cannot express an infinitely-nested structure inline, so we
+		// stop at the first recursion and emit the surrounding object
+		// with no nested properties.
+		return Result{}
+	}
+	visited[t] = true
+	defer delete(visited, t)
+
 	res := Result{Properties: make(map[string]Property)}
-	schemaCache.Store(t, res)
 
 	for i := 0; i < t.NumField(); i++ {
 		f := t.Field(i)
@@ -60,7 +82,7 @@ func Generate(t reflect.Type) Result {
 			continue
 		}
 
-		prop := fieldProp(f)
+		prop := fieldProp(f, visited)
 		res.Properties[name] = prop
 
 		if hasTag(f, "required") {
@@ -71,7 +93,15 @@ func Generate(t reflect.Type) Result {
 		initPropertyPattern(&prop)
 		res.Properties[k] = prop
 	}
-	schemaCache.Store(t, res)
+
+	// Race-tolerant cache write: if a concurrent goroutine finished
+	// first, adopt its result instead of clobbering it with our own
+	// identical copy.
+	if actual, loaded := schemaCache.LoadOrStore(t, res); loaded {
+		if existing, ok := actual.(Result); ok {
+			return existing
+		}
+	}
 	return res
 }
 
@@ -105,7 +135,7 @@ func fieldName(f reflect.StructField) string {
 	return strings.ToLower(f.Name[:1]) + f.Name[1:]
 }
 
-func fieldProp(f reflect.StructField) Property {
+func fieldProp(f reflect.StructField, visited map[reflect.Type]bool) Property {
 	ft := f.Type
 	if ft.Kind() == reflect.Ptr {
 		ft = ft.Elem()
@@ -115,7 +145,7 @@ func fieldProp(f reflect.StructField) Property {
 
 	switch ft.Kind() {
 	case reflect.Struct:
-		nested := Generate(ft)
+		nested := generateImpl(ft, visited)
 		p.Type = "object"
 		p.Properties = nested.Properties
 		p.Required = nested.Required
@@ -126,13 +156,19 @@ func fieldProp(f reflect.StructField) Property {
 			elemType = elemType.Elem()
 		}
 		if elemType.Kind() == reflect.Struct {
-			nested := Generate(elemType)
+			nested := generateImpl(elemType, visited)
 			elem := Property{Type: "object", Properties: nested.Properties, Required: nested.Required}
 			p.Items = &elem
 		} else {
 			elem := Property{Type: goTypeToJSON(elemType.Kind())}
 			p.Items = &elem
 		}
+	case reflect.Map:
+		// JSON Schema cannot enumerate arbitrary map keys at reflect
+		// time; report this as an open "object" (additionalProperties
+		// allowed). Before this fix, map fields fell through to the
+		// default branch and were mis-declared as "string".
+		p.Type = "object"
 	default:
 		p.Type = goTypeToJSON(ft.Kind())
 	}

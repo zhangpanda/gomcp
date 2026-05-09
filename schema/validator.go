@@ -28,30 +28,46 @@ func (e *ValidationError) Error() string {
 
 // Validate checks args against a schema Result. Returns nil if valid.
 func Validate(args map[string]any, s Result) error {
-	var errs []FieldError
-
-	// check required
-	for _, name := range s.Required {
-		if _, ok := args[name]; !ok {
-			errs = append(errs, FieldError{Field: name, Message: "required"})
-		}
-	}
-
-	// check constraints per field
-	for name, prop := range s.Properties {
-		val, ok := args[name]
-		if !ok {
-			continue
-		}
-		if fieldErrs := validateField(name, val, prop); len(fieldErrs) > 0 {
-			errs = append(errs, fieldErrs...)
-		}
-	}
-
+	errs := validateObject("", args, s.Properties, s.Required)
 	if len(errs) > 0 {
 		return &ValidationError{Fields: errs}
 	}
 	return nil
+}
+
+// validateObject validates a map against a set of property schemas and a
+// required list. Used both at the top level and recursively for nested
+// "type: object" fields.
+func validateObject(pathPrefix string, args map[string]any, props map[string]Property, required []string) []FieldError {
+	var errs []FieldError
+
+	// required check
+	for _, name := range required {
+		if _, ok := args[name]; !ok {
+			errs = append(errs, FieldError{Field: joinPath(pathPrefix, name), Message: "required"})
+		}
+	}
+
+	// per-field constraints
+	for name, prop := range props {
+		val, ok := args[name]
+		if !ok {
+			continue
+		}
+		if fieldErrs := validateField(joinPath(pathPrefix, name), val, prop); len(fieldErrs) > 0 {
+			errs = append(errs, fieldErrs...)
+		}
+	}
+
+	return errs
+}
+
+// joinPath composes a dotted error path for nested validation.
+func joinPath(prefix, name string) string {
+	if prefix == "" {
+		return name
+	}
+	return prefix + "." + name
 }
 
 func validateField(name string, val any, prop Property) []FieldError {
@@ -90,6 +106,37 @@ func validateField(name string, val any, prop Property) []FieldError {
 		} else if prop.Pattern != "" {
 			if matched, _ := regexp.MatchString(prop.Pattern, s); !matched {
 				errs = append(errs, FieldError{Field: name, Message: fmt.Sprintf("must match pattern %s", prop.Pattern)})
+			}
+		}
+	}
+
+	// Recurse into nested objects / arrays so that deep violations are
+	// reported. Before this was added, required keys and constraints on
+	// nested structs were silently ignored.
+	switch prop.Type {
+	case "object":
+		if m, ok := val.(map[string]any); ok {
+			if len(prop.Properties) > 0 || len(prop.Required) > 0 {
+				errs = append(errs, validateObject(name, m, prop.Properties, prop.Required)...)
+			}
+		}
+	case "array":
+		if prop.Items != nil {
+			// JSON decoding commonly yields []any; accept the concrete
+			// []string / []float64 / []map[string]any cases too.
+			switch arr := val.(type) {
+			case []any:
+				for i, item := range arr {
+					errs = append(errs, validateField(fmt.Sprintf("%s[%d]", name, i), item, *prop.Items)...)
+				}
+			case []string:
+				for i, item := range arr {
+					errs = append(errs, validateField(fmt.Sprintf("%s[%d]", name, i), item, *prop.Items)...)
+				}
+			case []map[string]any:
+				for i, item := range arr {
+					errs = append(errs, validateField(fmt.Sprintf("%s[%d]", name, i), item, *prop.Items)...)
+				}
 			}
 		}
 	}
