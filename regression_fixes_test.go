@@ -134,10 +134,15 @@ func TestRegression_SessionEvictionDoesNotLoseActiveWrites(t *testing.T) {
 		t.Fatal("fresh session should not carry state across eviction")
 	}
 
-	// And eviction must not wipe out concurrent writes on the server
-	// that just touched the session: we start fresh and touch rapidly
-	// while scheduling eviction with a past-ttl time.
+	// And eviction must not wipe out a session that is actively being
+	// touched. Seed the session synchronously so the test does not
+	// depend on the racer goroutine winning the Go scheduler (which
+	// failed intermittently on CI), then touch it from a goroutine
+	// while scheduling eviction with a present-time "now" (not past
+	// the TTL, so nothing should be evicted anyway).
 	s3 := gomcp.New("t3", "1.0")
+	s3.Sessions().Get("racer") // seed deterministically
+
 	var wg sync.WaitGroup
 	stop := make(chan struct{})
 	wg.Add(1)
