@@ -20,11 +20,22 @@ func TestIntegration_Stdio_FullFlow(t *testing.T) {
 		t.Skip("skipping stdio integration test in short mode")
 	}
 
-	// Start filesystem server as subprocess
+	// Start filesystem server as subprocess.
+	//
+	// go run spawns the compiled binary as a grandchild, so a plain
+	// cmd.Process.Kill() only reaps the wrapper and can leave the
+	// real server running. Put the whole tree in one process group
+	// so we can signal every descendant via the negative PID idiom
+	// (see setSubprocessGroup / killSubprocessGroup below). The
+	// filesystem example also exits on stdin EOF, which is what
+	// saves this test today — the belt-and-suspenders here is to
+	// keep integration tests robust if a future server handler is
+	// less graceful about stdin closing.
 	cmd := exec.Command("go", "run", "./examples/filesystem")
 	cmd.Dir = projectRoot(t)
 	cmd.Env = append(os.Environ(), "FS_ROOT="+t.TempDir())
 	cmd.Stderr = os.Stderr
+	setSubprocessGroup(cmd)
 
 	stdin, _ := cmd.StdinPipe()
 	stdout, _ := cmd.StdoutPipe()
@@ -35,9 +46,9 @@ func TestIntegration_Stdio_FullFlow(t *testing.T) {
 		t.Fatalf("start server: %v", err)
 	}
 	defer func() {
-		stdin.Close()
-		cmd.Process.Kill()
-		cmd.Wait()
+		_ = stdin.Close()
+		killSubprocessGroup(cmd)
+		_ = cmd.Wait()
 	}()
 
 	time.Sleep(500 * time.Millisecond)
