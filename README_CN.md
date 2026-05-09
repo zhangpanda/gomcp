@@ -281,6 +281,13 @@ s.Use(gomcp.BearerAuthSkipHandshake(tokenValidator))
 s.Use(gomcp.APIKeyAuthSkipHandshake("X-API-Key", keyValidator))
 ```
 
+> **认证错误的返回形态。** 当 BearerAuth / APIKeyAuth / BasicAuth /
+> RequireRole / RequirePermission 中间件拒绝一次调用时，框架会返回
+> 一个普通的 JSON-RPC `result`，其中 `isError = true` 且
+> `content[0].text` 里是拒绝原因——**不是** JSON-RPC 的 `error`
+> 对象，**也不是** HTTP 401/403。客户端需要检查工具调用结果的
+> `isError` 字段来判断鉴权失败。
+
 ### 工具分组
 
 ```go
@@ -339,6 +346,24 @@ s.AsyncTool("report", "生成报告", handler)
 ```go
 s.LoadDir("./tools/", gomcp.DirOptions{Watch: true})
 ```
+
+YAML tool 文件格式：
+
+```yaml
+name: search
+description: 全文档搜索
+version: "1.0"            # 可选——非空会把 tool 名改成 "search@1.0"
+method: GET
+handler: https://example.com/search
+params:
+  - {name: query, type: string, required: true, description: 查询关键字}
+```
+
+> **注意——`version` 会改写 tool 名。** YAML 里非空的 `version` 字段
+> 会让 Provider 把 tool 注册为 `name@version`（例如 `search@1.0`），
+> 与 [`gomcp.Version()`](#组件版本化) 的约定一致。这也是客户端调用
+> `tools/call` 时必须使用的名字，以及 `tools/list` 里展示的名字。
+> 如果希望保留 `search` 这样的无版本名，直接删掉 `version` 字段即可。
 
 <a id="server-lifecycle"></a>
 

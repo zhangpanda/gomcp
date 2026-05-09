@@ -23,10 +23,17 @@ type DirOptions struct {
 }
 
 // toolDef is the YAML tool definition format.
+//
+// A non-empty Version changes the registered tool name to
+// "<Name>@<Version>" (e.g. Name="search" + Version="1.0" is exposed
+// as "search@1.0" in tools/list and is called with the versioned
+// name in tools/call). This is the framework's versioning convention
+// — see [Version] for details. Leave Version empty for an
+// unversioned tool.
 type toolDef struct {
 	Name        string     `yaml:"name"`
 	Description string     `yaml:"description"`
-	Version     string     `yaml:"version"`
+	Version     string     `yaml:"version"` // optional; non-empty renames tool to "Name@Version"
 	Params      []paramDef `yaml:"params"`
 	Handler     string     `yaml:"handler"` // HTTP URL to forward to
 	Method      string     `yaml:"method"`  // HTTP method (default GET)

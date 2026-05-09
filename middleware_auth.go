@@ -56,6 +56,21 @@ func getHeader(ctx *Context, key string) string {
 }
 
 // --- Auth Middleware ---
+//
+// Error shape for Auth and RBAC middleware (BearerAuth, APIKeyAuth,
+// BasicAuth, RequireRole, RequirePermission):
+//
+// When any of these middleware fails, the returned error is wrapped by
+// the server's request pipeline into a normal JSON-RPC result with
+// the tool-level flag IsError=true. It is not surfaced as a
+// JSON-RPC error object (i.e. the response has "result.isError" =
+// true, "result.content[0].text" = "auth: ...", and no "error" key).
+//
+// Clients that only inspect the JSON-RPC "error" field will miss
+// auth failures; inspect the tools/call result's IsError instead.
+// This is also why 401/403 are not emitted as HTTP status codes on
+// the Streamable-HTTP transport — the transport always responds with
+// 200 OK and the refusal lives inside the JSON-RPC result.
 
 // TokenValidator validates a bearer token and returns claims (stored in context as "_auth_claims").
 // Implement JWT or opaque-token checks yourself inside validate; this package does not parse JWTs.
@@ -253,6 +268,10 @@ func BasicAuth(validate func(username, password string) (map[string]any, error))
 }
 
 // --- Authorization Middleware ---
+//
+// RequireRole and RequirePermission follow the same error-shape rule
+// as the auth middleware above: a failed check is returned as a
+// tools/call result with IsError=true, not as a JSON-RPC error.
 
 // RequireRole returns a middleware that checks if the authenticated user has the required role.
 // Roles are read from ctx store key "_auth_roles" (set by auth middleware).
