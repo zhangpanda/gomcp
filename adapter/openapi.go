@@ -119,19 +119,39 @@ func callOpenAPI(baseURL, method, path string, op openAPIOperation, spec *openAP
 		fullURL += "?" + queryParams.Encode()
 	}
 
-	// build body from requestBody schema fields or raw "body" param
+	// Build the request body. Previously this only read each property
+	// via ctx.String, which silently garbled arrays and nested objects
+	// because a []any came out as Go's default "[a b]" formatting and
+	// then coerceValue failed to parse it. Now we read the raw value
+	// from ctx.Args() so native types (arrays, maps, numbers) pass
+	// through unchanged, and fall back to ctx.String for string-typed
+	// fields so the existing "body with a scalar field" path still
+	// works.
 	var bodyReader io.Reader
 	if op.RequestBody != nil {
 		bodySchema := spec.resolveSchema(op.RequestBody.jsonSchema(spec))
 		if bodySchema.Type == "object" && len(bodySchema.Properties) > 0 {
 			bodyMap := make(map[string]any)
+			args := ctx.Args()
 			for name, propSchema := range bodySchema.Properties {
+				resolved := spec.resolveSchema(propSchema)
+				if raw, ok := args[name]; ok && raw != nil {
+					// Use the raw decoded value so arrays / nested
+					// objects / numbers survive.
+					bodyMap[name] = raw
+					continue
+				}
+				// Legacy fallback: string-only scalar extraction via
+				// ctx.String, with attempt at int/number/bool coercion.
 				if v := ctx.String(name); v != "" {
-					bodyMap[name] = coerceValue(v, spec.resolveSchema(propSchema).Type)
+					bodyMap[name] = coerceValue(v, resolved.Type)
 				}
 			}
 			if len(bodyMap) > 0 {
-				data, _ := json.Marshal(bodyMap)
+				data, err := json.Marshal(bodyMap)
+				if err != nil {
+					return gomcp.ErrorResult("marshal body: " + err.Error()), nil
+				}
 				bodyReader = bytes.NewReader(data)
 			}
 		}
@@ -179,14 +199,9 @@ func buildOpSchema(op openAPIOperation, method string, spec *openAPISpec) gomcp.
 	for _, p := range op.Parameters {
 		p = spec.resolveParam(p)
 		s := spec.resolveSchema(p.Schema)
-		prop := gomcp.JSONSchema{
-			Type:        schemaType(s.Type),
-			Description: p.Description,
-		}
-		if len(s.Enum) > 0 {
-			for _, e := range s.Enum {
-				prop.Enum = append(prop.Enum, e)
-			}
+		prop := openAPIToJSONSchema(s, spec)
+		if prop.Description == "" {
+			prop.Description = p.Description
 		}
 		props[p.Name] = prop
 		if p.Required {
@@ -200,16 +215,7 @@ func buildOpSchema(op openAPIOperation, method string, spec *openAPISpec) gomcp.
 		if bodySchema.Type == "object" && len(bodySchema.Properties) > 0 {
 			for name, propSchema := range bodySchema.Properties {
 				ps := spec.resolveSchema(propSchema)
-				prop := gomcp.JSONSchema{
-					Type:        schemaType(ps.Type),
-					Description: ps.Description,
-				}
-				if len(ps.Enum) > 0 {
-					for _, e := range ps.Enum {
-						prop.Enum = append(prop.Enum, e)
-					}
-				}
-				props[name] = prop
+				props[name] = openAPIToJSONSchema(ps, spec)
 			}
 			required = append(required, bodySchema.Required...)
 		} else {
@@ -219,6 +225,36 @@ func buildOpSchema(op openAPIOperation, method string, spec *openAPISpec) gomcp.
 	}
 
 	return gomcp.JSONSchema{Type: "object", Properties: props, Required: required}
+}
+
+// openAPIToJSONSchema converts an OpenAPI schema to gomcp.JSONSchema,
+// propagating enum / items / nested properties / required. The previous
+// implementation built only Type+Description+Enum, so tool schemas lost
+// array item types and nested-object structure — clients that relied
+// on a well-formed JSON Schema (e.g. Claude / Cursor strict modes)
+// silently dropped those parameters.
+func openAPIToJSONSchema(s openAPISchema, spec *openAPISpec) gomcp.JSONSchema {
+	out := gomcp.JSONSchema{
+		Type:        schemaType(s.Type),
+		Description: s.Description,
+		Required:    append([]string(nil), s.Required...),
+	}
+	if len(s.Enum) > 0 {
+		for _, e := range s.Enum {
+			out.Enum = append(out.Enum, e)
+		}
+	}
+	if s.Items != nil {
+		inner := openAPIToJSONSchema(spec.resolveSchema(*s.Items), spec)
+		out.Items = &inner
+	}
+	if len(s.Properties) > 0 {
+		out.Properties = make(map[string]gomcp.JSONSchema, len(s.Properties))
+		for k, v := range s.Properties {
+			out.Properties[k] = openAPIToJSONSchema(spec.resolveSchema(v), spec)
+		}
+	}
+	return out
 }
 
 func opToolName(opID, method, path string, custom func(string, string, string) string) string {

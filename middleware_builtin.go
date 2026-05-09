@@ -101,7 +101,12 @@ func (b *tokenBucket) take() bool {
 	defer b.mu.Unlock()
 
 	now := time.Now()
-	b.tokens += now.Sub(b.lastTime).Seconds() * b.rate
+	// Guard against clock regression (NTP step, VM suspend/resume).
+	// A negative delta would subtract tokens, temporarily locking out
+	// all callers until the bucket refilled back to 1.
+	if delta := now.Sub(b.lastTime); delta > 0 {
+		b.tokens += delta.Seconds() * b.rate
+	}
 	b.lastTime = now
 	if b.tokens > b.max {
 		b.tokens = b.max

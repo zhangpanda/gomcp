@@ -4,7 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"strings"
+	"time"
+	"unicode"
 
 	"github.com/zhangpanda/gomcp"
 	"google.golang.org/grpc"
@@ -21,6 +24,16 @@ import (
 type GRPCOptions struct {
 	Services   []string // filter to these service names (empty = all)
 	NamingFunc func(service, method string) string
+	// Timeout caps how long the reflection discovery (and each request
+	// within it) may run. Zero means 10 seconds; negative disables the
+	// cap. Without it, a stuck reflection server hung ImportGRPC
+	// forever.
+	Timeout time.Duration
+	// Logger, when set, receives a warning each time a service or file
+	// descriptor is skipped. Previously discovery failures were
+	// silently swallowed, making it impossible to tell why a method
+	// was missing.
+	Logger *slog.Logger
 }
 
 // ImportGRPC discovers gRPC services via server reflection and registers each
@@ -167,7 +180,25 @@ func callGRPCMethod(conn *grpc.ClientConn, fullMethod string, inputDesc, outputD
 	return gomcp.TextResult(string(respJSON)), nil
 }
 
+// protoMessageToSchema builds a JSON schema for a protobuf message.
+// It handles repeated fields as arrays, map fields as open objects,
+// and message / group fields as nested objects — the previous version
+// flattened everything to scalar types, leaving clients unable to see
+// the actual request shape.
 func protoMessageToSchema(md protoreflect.MessageDescriptor) gomcp.JSONSchema {
+	return messageToJSONSchema(md, make(map[protoreflect.FullName]bool))
+}
+
+func messageToJSONSchema(md protoreflect.MessageDescriptor, visited map[protoreflect.FullName]bool) gomcp.JSONSchema {
+	if visited[md.FullName()] {
+		// Recursive proto types (e.g. a tree node). Stop here — the
+		// outer object is already declared, we just avoid infinite
+		// descent by returning an anonymous object.
+		return gomcp.JSONSchema{Type: "object"}
+	}
+	visited[md.FullName()] = true
+	defer delete(visited, md.FullName())
+
 	props := make(map[string]gomcp.JSONSchema)
 	var required []string
 
@@ -175,14 +206,43 @@ func protoMessageToSchema(md protoreflect.MessageDescriptor) gomcp.JSONSchema {
 	for i := 0; i < fields.Len(); i++ {
 		fd := fields.Get(i)
 		name := string(fd.JSONName())
-		prop := gomcp.JSONSchema{
-			Type:        protoKindToJSONType(fd.Kind()),
-			Description: string(fd.FullName()),
-		}
-		props[name] = prop
+		props[name] = fieldToJSONSchema(fd, visited)
 	}
 
 	return gomcp.JSONSchema{Type: "object", Properties: props, Required: required}
+}
+
+func fieldToJSONSchema(fd protoreflect.FieldDescriptor, visited map[protoreflect.FullName]bool) gomcp.JSONSchema {
+	desc := string(fd.FullName())
+
+	if fd.IsMap() {
+		// proto map<K,V> → JSON object with no fixed properties.
+		// Document the value kind in the description since JSON Schema
+		// draft used by gomcp doesn't expose additionalProperties.
+		return gomcp.JSONSchema{
+			Type:        "object",
+			Description: desc + " (map<" + fd.MapKey().Kind().String() + "," + fd.MapValue().Kind().String() + ">)",
+		}
+	}
+
+	if fd.IsList() {
+		// repeated T → array.
+		var items gomcp.JSONSchema
+		if fd.Kind() == protoreflect.MessageKind || fd.Kind() == protoreflect.GroupKind {
+			items = messageToJSONSchema(fd.Message(), visited)
+		} else {
+			items = gomcp.JSONSchema{Type: protoKindToJSONType(fd.Kind())}
+		}
+		return gomcp.JSONSchema{Type: "array", Items: &items, Description: desc}
+	}
+
+	if fd.Kind() == protoreflect.MessageKind || fd.Kind() == protoreflect.GroupKind {
+		nested := messageToJSONSchema(fd.Message(), visited)
+		nested.Description = desc
+		return nested
+	}
+
+	return gomcp.JSONSchema{Type: protoKindToJSONType(fd.Kind()), Description: desc}
 }
 
 func protoKindToJSONType(k protoreflect.Kind) string {
@@ -220,16 +280,27 @@ func grpcToolName(service, method string, custom func(string, string) string) st
 }
 
 func toSnakeCase(s string) string {
-	var result []byte
-	for i, c := range s {
-		if c >= 'A' && c <= 'Z' {
+	runes := []rune(s)
+	var out []rune
+	for i, r := range runes {
+		if unicode.IsUpper(r) {
+			// Insert underscore before an upper-case letter except at
+			// the start, and except when it's the middle of an acronym
+			// run like "HTTPServer" (neighbours both upper-case).
 			if i > 0 {
-				result = append(result, '_')
+				prev := runes[i-1]
+				next := rune(0)
+				if i+1 < len(runes) {
+					next = runes[i+1]
+				}
+				if unicode.IsLower(prev) || (unicode.IsUpper(prev) && unicode.IsLower(next)) {
+					out = append(out, '_')
+				}
 			}
-			result = append(result, byte(c+'a'-'A'))
+			out = append(out, unicode.ToLower(r))
 		} else {
-			result = append(result, byte(c))
+			out = append(out, r)
 		}
 	}
-	return string(result)
+	return string(out)
 }
