@@ -8,7 +8,9 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
+	"time"
 )
 
 // Server interface matches the subset of gomcp.Server needed by the inspector.
@@ -18,7 +20,17 @@ type Server interface {
 }
 
 // Dev starts a development server with Inspector UI on the given address.
+//
+// If addr has no host (e.g. ":8080") the listener is bound to
+// 127.0.0.1 so the inspector is not reachable from the network by
+// default — the /api/call endpoint has no authentication and can
+// invoke every registered tool. Pass an explicit host (e.g.
+// "0.0.0.0:8080") to opt into network exposure.
 func Dev(s Server, addr string) error {
+	if strings.HasPrefix(addr, ":") {
+		addr = "127.0.0.1" + addr
+	}
+
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
@@ -71,7 +83,9 @@ func Dev(s Server, addr string) error {
 
 	select {
 	case <-ctx.Done():
-		return srv.Shutdown(context.Background())
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		return srv.Shutdown(shutdownCtx)
 	case err := <-errCh:
 		return err
 	}

@@ -496,15 +496,18 @@ func (s *Server) handleToolsCall(parent *Context, msg *jsonrpcMessage) *jsonrpcM
 		return newErrorResponse(msg.ID, -32001, "tool not found: "+params.Name)
 	}
 
-	// Use the args map that just flowed through middleware so any
-	// mutation done there (e.g. APIKeyAuth stripping api_key after
+	// Use the args map that flowed through the middleware chain so any
+	// mutation done there (e.g. [APIKeyAuth] stripping api_key after
 	// validation) is visible to schema validation and the handler.
-	// Fall back to the freshly unmarshalled map if the middleware layer
-	// produced no args (e.g. notifications or custom dispatch paths).
+	//
+	// We intentionally do NOT fall back to params.Arguments when
+	// parent.Args() is empty: tools/call always produces a
+	// middleware-visible args map via mergedArgsForMiddleware (an
+	// empty map at worst), so an empty parent.Args() means either
+	// "the request truly had no arguments" or "middleware deleted
+	// them all on purpose" — both cases the handler should see the
+	// empty map, not the pre-middleware original.
 	args := parent.Args()
-	if len(args) == 0 && params.Arguments != nil {
-		args = params.Arguments
-	}
 
 	// validate parameters if schema available
 	if entry.schemaRes != nil {

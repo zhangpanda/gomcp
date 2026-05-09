@@ -261,10 +261,53 @@ func TestRegression_WatchDirNotifiesOnDelete(t *testing.T) {
 	t.Fatal("watchDir did not notify list_changed after file deletion")
 }
 
+// BUG Self-1: the first cut of the APIKeyAuth scrub landed together
+// with a fallback in handleToolsCall that re-read params.Arguments
+// whenever parent.Args() was empty. That fallback silently defeated
+// the scrub in the edge case where 'api_key' was the ONLY argument
+// (scrub → parent.Args() empty → fallback → api_key visible to the
+// handler again). The fallback was dead weight (mergedArgsForMiddleware
+// always produces a middleware-visible map for tools/call) and is now
+// removed.
+func TestRegression_APIKeyAuthRedactsWhenSoleArg(t *testing.T) {
+	s := gomcp.New("t", "1.0")
+	s.Use(gomcp.APIKeyAuth("X-Api-Key", func(k string) (map[string]any, error) {
+		if k == "good" {
+			return map[string]any{}, nil
+		}
+		return nil, fmt.Errorf("bad")
+	}))
+
+	var seenByHandler map[string]any
+	s.Tool("inspect", "inspect", func(ctx *gomcp.Context) (*gomcp.CallToolResult, error) {
+		snap := make(map[string]any, len(ctx.Args()))
+		for k, v := range ctx.Args() {
+			snap[k] = v
+		}
+		seenByHandler = snap
+		return ctx.Text("done"), nil
+	})
+
+	// The key case: api_key is the only argument. Before the fix the
+	// scrub left parent.Args() empty, which tripped the fallback in
+	// handleToolsCall and reinstated api_key for the handler.
+	params, _ := json.Marshal(map[string]any{
+		"name":      "inspect",
+		"arguments": map[string]any{"api_key": "good"},
+	})
+	req, _ := json.Marshal(map[string]any{"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": json.RawMessage(params)})
+	s.HandleRaw(context.Background(), req)
+
+	if _, present := seenByHandler["api_key"]; present {
+		t.Fatal("api_key should have been stripped even when it is the only argument")
+	}
+}
+
 // BUG FIX-8 (LOW): APIKeyAuth's argument fallback left api_key in the
 // live ctx.Args() map, so a later Logger middleware or the tool handler
 // itself could observe (and log) the secret. The fix deletes the key
-// from args after a successful validation.
+// from args after a successful validation, and must not nuke the
+// non-secret arguments alongside it.
 func TestRegression_APIKeyAuthRedactsArgAfterValidation(t *testing.T) {
 	s := gomcp.New("t", "1.0")
 	s.Use(gomcp.APIKeyAuth("X-Api-Key", func(k string) (map[string]any, error) {
@@ -276,7 +319,6 @@ func TestRegression_APIKeyAuthRedactsArgAfterValidation(t *testing.T) {
 
 	var seenByHandler map[string]any
 	s.Tool("inspect", "inspect", func(ctx *gomcp.Context) (*gomcp.CallToolResult, error) {
-		// snapshot so a background eviction cannot mutate it after the handler returns
 		snap := make(map[string]any, len(ctx.Args()))
 		for k, v := range ctx.Args() {
 			snap[k] = v

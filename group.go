@@ -36,22 +36,20 @@ func (g *Group) Tool(name, description string, handler HandlerFunc, opts ...Tool
 // ToolFunc registers a typed tool under this group.
 func (g *Group) ToolFunc(name, description string, fn any, opts ...ToolOption) {
 	fullName := g.prefix + "." + name
-	g.server.ToolFunc(fullName, description, fn, opts...)
 
-	// now wrap the registered handler with group middleware
-	if len(g.middlewares) == 0 {
-		return
+	// Build the schema-aware entry, apply opts to discover the version
+	// suffix, wrap the handler with group middleware, and register in
+	// a single s.mu.Lock critical section so no client request can
+	// observe the tool in its unwrapped form. The previous design
+	// called s.ToolFunc() first (which took s.mu on its own), then
+	// acquired s.mu a second time to replace the handler — between
+	// those two locks a tools/call for this tool would bypass all
+	// group middleware.
+	entry := g.server.buildTypedToolEntry(fullName, description, fn)
+	if len(g.middlewares) > 0 {
+		entry.handler = g.wrapHandler(entry.handler)
 	}
-	g.server.mu.Lock()
-	defer g.server.mu.Unlock()
-	// find the key (may have @version suffix)
-	for key, entry := range g.server.tools {
-		if key == fullName || (len(key) > len(fullName) && key[:len(fullName)+1] == fullName+"@") {
-			original := entry.handler
-			entry.handler = g.wrapHandlerFunc(original)
-			g.server.tools[key] = entry
-		}
-	}
+	g.server.registerTool(fullName, entry, opts)
 }
 
 func (g *Group) wrapHandler(handler HandlerFunc) HandlerFunc {
@@ -72,8 +70,4 @@ func (g *Group) wrapHandler(handler HandlerFunc) HandlerFunc {
 		}
 		return result, nil
 	}
-}
-
-func (g *Group) wrapHandlerFunc(handler HandlerFunc) HandlerFunc {
-	return g.wrapHandler(handler)
 }

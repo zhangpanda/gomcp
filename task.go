@@ -48,6 +48,7 @@ type taskManager struct {
 	// used context.Background() which leaked on Server.Close.
 	rootCtx    context.Context
 	rootCancel context.CancelFunc
+	closeOnce  sync.Once
 }
 
 func newTaskManager(maxConcurrent int) *taskManager {
@@ -67,15 +68,15 @@ func newTaskManager(maxConcurrent int) *taskManager {
 }
 
 // close cancels all in-flight task contexts and stops the eviction loop.
-// Idempotent.
+// Idempotent: guarded by closeOnce so concurrent / repeated callers are
+// safe. Server.Close already gates this via its own sync.Once, but the
+// defensive wrapper keeps the method independently correct in case it
+// ever gets called from elsewhere.
 func (tm *taskManager) close() {
-	tm.rootCancel()
-	select {
-	case <-tm.done:
-		// already closed
-	default:
+	tm.closeOnce.Do(func() {
+		tm.rootCancel()
 		close(tm.done)
-	}
+	})
 }
 
 func (tm *taskManager) evictLoop() {
