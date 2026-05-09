@@ -60,8 +60,17 @@ func init() {
 }
 
 func safePath(rel string) (string, error) {
-	abs := filepath.Join(root, filepath.Clean(rel))
-	if !strings.HasPrefix(abs, root) {
+	// Normalise the root once with a trailing separator so that the
+	// prefix check below cannot be tricked by sibling directories
+	// whose names happen to share a prefix with root (e.g. root
+	// "/tmp/a" would otherwise accept "/tmp/aa/evil" because the
+	// string prefix matches).
+	absRoot, err := filepath.Abs(root)
+	if err != nil {
+		return "", err
+	}
+	abs := filepath.Join(absRoot, filepath.Clean(rel))
+	if abs != absRoot && !strings.HasPrefix(abs, absRoot+string(filepath.Separator)) {
 		return "", fmt.Errorf("path traversal not allowed")
 	}
 	return abs, nil

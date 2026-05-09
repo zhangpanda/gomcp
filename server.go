@@ -552,7 +552,10 @@ func (s *Server) handleToolsCall(parent *Context, msg *jsonrpcMessage) *jsonrpcM
 		return newResponse(msg.ID, ErrorResult(handlerErr.Error()))
 	}
 	if result == nil {
-		result = &CallToolResult{}
+		// Return an explicitly-empty content array instead of a zero
+		// CallToolResult, which would marshal to "content":null and
+		// trip strict MCP clients that require an array.
+		result = &CallToolResult{Content: []ContentBlock{}}
 	}
 	return newResponse(msg.ID, result)
 }

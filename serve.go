@@ -62,6 +62,15 @@ func (s *Server) rawHandler(ctx context.Context, raw json.RawMessage) json.RawMe
 		return nil
 	}
 
-	data, _ := json.Marshal(resp)
+	data, err := json.Marshal(resp)
+	if err != nil {
+		// A handler returned something that cannot be serialised (e.g.
+		// a Result containing a channel or a cyclic pointer). Surface
+		// the problem as a standard JSON-RPC internal error rather than
+		// silently writing an empty byte slice to stdio/HTTP.
+		s.logger.Error("marshal JSON-RPC response failed", "method", msg.Method, "error", err)
+		fallback := newErrorResponse(msg.ID, -32603, "internal error: failed to marshal response: "+err.Error())
+		data, _ = json.Marshal(fallback)
+	}
 	return data
 }
