@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -67,12 +68,22 @@ func ImportGin(s *gomcp.Server, engine *gin.Engine, opts ImportOptions) {
 }
 
 func callGinRoute(engine *gin.Engine, method, path string, pathParams []string, ctx *gomcp.Context) (*gomcp.CallToolResult, error) {
-	// substitute path params
+	// substitute path params. Values are URL-escaped so a caller passing
+	// "foo/bar" or "a b" can't rewrite the URL path or break net/http.
 	actualPath := path
+	var missing []string
 	for _, p := range pathParams {
 		val := ctx.String(p)
-		actualPath = strings.Replace(actualPath, ":"+p, val, 1)
-		actualPath = strings.Replace(actualPath, "*"+p, val, 1)
+		if val == "" {
+			missing = append(missing, p)
+			continue
+		}
+		escaped := url.PathEscape(val)
+		actualPath = strings.Replace(actualPath, ":"+p, escaped, 1)
+		actualPath = strings.Replace(actualPath, "*"+p, escaped, 1)
+	}
+	if len(missing) > 0 {
+		return gomcp.ErrorResult("missing required path parameter(s): " + strings.Join(missing, ", ")), nil
 	}
 
 	// build query string

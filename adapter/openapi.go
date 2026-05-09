@@ -76,11 +76,29 @@ func ImportOpenAPI(s *gomcp.Server, filePath string, opts OpenAPIOptions) error 
 
 func callOpenAPI(baseURL, method, path string, op openAPIOperation, spec *openAPISpec, authToken string, ctx *gomcp.Context) (*gomcp.CallToolResult, error) {
 	actualPath := path
+	var missingPathParams []string
 	for _, p := range op.Parameters {
 		p = spec.resolveParam(p)
 		if p.In == "path" {
-			actualPath = strings.ReplaceAll(actualPath, "{"+p.Name+"}", ctx.String(p.Name))
+			placeholder := "{" + p.Name + "}"
+			raw := ctx.String(p.Name)
+			if raw == "" {
+				// A missing path param used to substitute the empty
+				// string, producing malformed URLs like "/users/"
+				// that silently reached the server.
+				if strings.Contains(actualPath, placeholder) {
+					missingPathParams = append(missingPathParams, p.Name)
+				}
+				continue
+			}
+			// Escape reserved / unsafe characters so a value of
+			// "foo/bar" or "a b" does not rewrite the URL path nor
+			// emit spaces that break net/http.
+			actualPath = strings.ReplaceAll(actualPath, placeholder, url.PathEscape(raw))
 		}
+	}
+	if len(missingPathParams) > 0 {
+		return gomcp.ErrorResult("missing required path parameter(s): " + strings.Join(missingPathParams, ", ")), nil
 	}
 
 	var queryParams url.Values
