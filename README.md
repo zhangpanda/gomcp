@@ -147,7 +147,20 @@ gomcp/
 ├── inspector.go           # Web debug UI
 ├── provider.go            # Hot-reload from YAML
 └── examples/              # Working examples
+    ├── basic/             # Minimal stdio server
+    ├── filesystem/        # Real-world file ops
+    ├── gin-adapter/       # Import Gin routes
+    ├── openapi-adapter/   # Import Swagger/OpenAPI
+    └── grpc-adapter/      # Import gRPC services
 ```
+
+### 📖 Cookbook
+
+Step-by-step guides for common tasks (5 minutes each):
+
+- [Build a search tool](docs/cookbook/01-search-tool.md) — zero to Claude Desktop
+- [Import an existing API](docs/cookbook/02-import-existing-api.md) — Gin / OpenAPI / gRPC in one line
+- [Add auth + RBAC](docs/cookbook/03-auth-and-rbac.md) — Bearer tokens + role-based access
 
 ---
 

@@ -21,6 +21,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - **[BREAKING-FIX] `_tool_name` invisible to outer middleware chain.** `OpenTelemetry()` emitted spans named `mcp.tool.unknown` and `PrometheusMetrics()` bucketed all calls under an empty tool label. Root cause: `_tool_name` was only set inside `handleToolsCall` (on a forked child context) after the middleware chain had already fired. Now peeked from `tools/call` params before `executeChain` runs. **If you relied on the old (broken) behaviour of `_tool_name` being absent in middleware, this is a breaking change — but the old behaviour was a bug, not a feature.**
+- **Session leak in stdio mode.** `GetOrCreate("")` created a new session (with a random UUID) on every tool call when no `Mcp-Session-Id` header was present. After 30s of sustained load, heap grew 115x. Fix: empty-id calls now reuse a single `_default` session.
+- **Redundant JSON unmarshal in handleToolsCall.** `msg.Params` was parsed twice per tool call (once in `mergedArgsForMiddleware`, once in `handleToolsCall`). Eliminated the second parse by reading `_tool_name` from context. Saves ~8 allocs and ~300B per call.
 - Subprocess cleanup in `integration_stdio_test.go` uses process groups (Setpgid + killGroup) to prevent grandchild leaks from `go run`.
 
 ### Changed

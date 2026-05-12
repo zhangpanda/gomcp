@@ -147,7 +147,20 @@ gomcp/
 ├── inspector.go           # Web 调试界面
 ├── provider.go            # YAML 热加载
 └── examples/              # 可运行的示例
+    ├── basic/             # 最小 stdio 服务
+    ├── filesystem/        # 真实文件操作
+    ├── gin-adapter/       # 导入 Gin 路由
+    ├── openapi-adapter/   # 导入 Swagger/OpenAPI
+    └── grpc-adapter/      # 导入 gRPC 服务
 ```
+
+### 📖 Cookbook
+
+手把手教程（每篇 5 分钟）：
+
+- [搭一个搜索工具](docs/cookbook/01-search-tool.md) — 从零到 Claude Desktop 可调用
+- [导入现有 API](docs/cookbook/02-import-existing-api.md) — Gin / OpenAPI / gRPC 一行搞定
+- [加认证 + 权限控制](docs/cookbook/03-auth-and-rbac.md) — Bearer token + 角色鉴权
 
 ---
 
