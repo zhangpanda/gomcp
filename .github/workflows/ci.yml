@@ -21,7 +21,22 @@ jobs:
           version: v2.8
 
   test:
-    runs-on: ubuntu-latest
+    # Cross-platform matrix so Windows-specific regressions (unix build
+    # tags missing a fallback, path separators, signal handling,
+    # GOOS-gated syscalls) can't ride to main unnoticed.
+    #
+    # We keep -race on linux where it's cheapest; windows runners get
+    # the same test set without -race because the Windows race
+    # detector has historically been slow and noisy on GitHub runners.
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            race: "-race"
+          - os: windows-latest
+            race: ""
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v6
 
@@ -33,4 +48,4 @@ jobs:
         run: go vet ./...
 
       - name: Test
-        run: go test -race -count=1 -timeout 120s ./...
+        run: go test ${{ matrix.race }} -count=1 -timeout 180s ./...
