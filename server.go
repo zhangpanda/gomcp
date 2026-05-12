@@ -383,6 +383,26 @@ func (s *Server) handleRequestInternal(ctx context.Context, msg *jsonrpcMessage)
 	base := newContext(ctx, mergedArgsForMiddleware(msg), s.logger)
 	base.Set("_mcp_method", msg.Method)
 
+	// Pre-extract the tool name for tools/call so middlewares that
+	// read "_tool_name" (OpenTelemetry span naming, PrometheusMetrics
+	// labels, custom audit chains) actually see it.
+	//
+	// Previously "_tool_name" was only set deep inside handleToolsCall,
+	// after the outer middleware chain had already fired. OTel spans
+	// came out as "mcp.tool.unknown" and Prometheus counters got
+	// empty-string tool labels — the middleware was effectively
+	// blind to which tool it was wrapping. Peeking once here avoids
+	// that without rerouting the chain through every per-method
+	// handler.
+	if msg.Method == "tools/call" && len(msg.Params) > 0 {
+		var p struct {
+			Name string `json:"name"`
+		}
+		if err := json.Unmarshal(msg.Params, &p); err == nil && p.Name != "" {
+			base.Set("_tool_name", p.Name)
+		}
+	}
+
 	var resp *jsonrpcMessage
 	var chainErr error
 	func() {
