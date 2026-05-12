@@ -9,6 +9,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `examples/grpc-adapter` — self-contained gRPC adapter example using grpc/health + reflection. No protoc required.
+- Benchmark tests for hot paths: `HandleRaw` dispatch, schema validation, middleware chain, tools/list.
+- Cookbook docs: `docs/cookbook/` with 3 guides (search tool, import existing API, auth + RBAC).
+- `release-please` workflow for automated changelog and versioning.
+- SSE endurance test (10s sustained connection, heartbeat + notification delivery verification).
+- CI matrix now includes `windows-latest` for cross-platform regression coverage.
+- `regression_tool_name_test.go` — locks in OTel span name and Prometheus tool label.
+- `regression_close_eviction_test.go` — stress test for Close() vs concurrent session eviction.
+
+### Fixed
+
+- **[BREAKING-FIX] `_tool_name` invisible to outer middleware chain.** `OpenTelemetry()` emitted spans named `mcp.tool.unknown` and `PrometheusMetrics()` bucketed all calls under an empty tool label. Root cause: `_tool_name` was only set inside `handleToolsCall` (on a forked child context) after the middleware chain had already fired. Now peeked from `tools/call` params before `executeChain` runs. **If you relied on the old (broken) behaviour of `_tool_name` being absent in middleware, this is a breaking change — but the old behaviour was a bug, not a feature.**
+- Subprocess cleanup in `integration_stdio_test.go` uses process groups (Setpgid + killGroup) to prevent grandchild leaks from `go run`.
+
+### Changed
+
+- Docs clarify auth middleware error shape: failures return `isError=true` in the tools/call result, not a JSON-RPC error object or HTTP 401/403.
+- Docs clarify Provider `version` field renames tool to `name@version`.
+
+---
+
+### Previously in [Unreleased]
+
 - Global `Use` middleware runs for JSON-RPC methods uniformly (except notification `notifications/initialized`); Streamable HTTP request context propagates into resource and prompt handlers.
 - `WithSSEAuth` plus `SSEBearerAuth`, `SSEAPIKeyAuth`, and `SSEBasicAuth` for SSE (GET) gates.
 - `SkipAuthForMCPMethods`, `HandshakeAuthSkipMethods`, and `*SkipHandshake` auth wrappers for MCP handshake-friendly HTTP clients.
