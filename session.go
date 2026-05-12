@@ -150,13 +150,14 @@ func (sm *SessionManager) Get(id string) *Session {
 }
 
 // GetOrCreate returns an existing session or creates one with a new ID.
+// When id is empty (e.g. stdio transport with no Mcp-Session-Id header),
+// a single shared "default" session is returned so that repeated calls
+// without a session header don't leak unbounded session objects.
 func (sm *SessionManager) GetOrCreate(id string) *Session {
 	if id != "" {
 		return sm.Get(id)
 	}
-	s := newSession()
-	sm.sessions.Store(s.ID, s)
-	return s
+	return sm.Get("_default")
 }
 
 // Remove deletes a session.
