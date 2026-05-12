@@ -296,6 +296,13 @@ s.Use(gomcp.BearerAuthSkipHandshake(tokenValidator))
 s.Use(gomcp.APIKeyAuthSkipHandshake("X-API-Key", keyValidator))
 ```
 
+> **Auth error shape.** When a BearerAuth / APIKeyAuth / BasicAuth /
+> RequireRole / RequirePermission middleware rejects a call, the
+> framework returns a regular JSON-RPC `result` with
+> `isError = true` and the reason in `content[0].text` — **not** a
+> JSON-RPC `error` object, and **not** an HTTP 401/403. Clients must
+> inspect the tool-call result's `isError` to detect auth failures.
+
 **Custom middleware:**
 
 ```go
@@ -371,6 +378,26 @@ s.AsyncTool("report", "Generate report", func(ctx *gomcp.Context) (*gomcp.CallTo
 ```go
 s.LoadDir("./tools/", gomcp.DirOptions{Watch: true})
 ```
+
+YAML tool file shape:
+
+```yaml
+name: search
+description: Full-text document search
+version: "1.0"            # OPTIONAL — non-empty renames the tool to "search@1.0"
+method: GET
+handler: https://example.com/search
+params:
+  - {name: query, type: string, required: true, description: Query text}
+```
+
+> **Heads up — `version` renames the tool.** A non-empty `version`
+> field makes the Provider register the tool as `name@version`
+> (e.g. `search@1.0`), following the same convention as
+> [`gomcp.Version()`](#component-versioning). That is the name
+> clients must pass to `tools/call`, and the name that shows up in
+> `tools/list`. Drop the `version` field entirely if you want an
+> unversioned tool called plain `search`.
 
 <a id="server-lifecycle"></a>
 
