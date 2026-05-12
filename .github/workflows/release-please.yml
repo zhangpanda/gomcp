@@ -16,3 +16,7 @@ jobs:
         with:
           release-type: go
           token: ${{ secrets.GITHUB_TOKEN }}
+        # If the repo hasn't enabled "Allow GitHub Actions to create
+        # pull requests" under Settings → Actions → General, this step
+        # will fail. That's a one-time setup — not a code issue.
+        continue-on-error: true
