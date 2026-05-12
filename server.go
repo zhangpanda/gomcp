@@ -499,35 +499,43 @@ func (s *Server) handleToolsList(msg *jsonrpcMessage) *jsonrpcMessage {
 }
 
 func (s *Server) handleToolsCall(parent *Context, msg *jsonrpcMessage) *jsonrpcMessage {
-	var params CallToolParams
-	if err := json.Unmarshal(msg.Params, &params); err != nil {
-		return newErrorResponse(msg.ID, -32602, "invalid params: "+err.Error())
+	// Extract tool name. Prefer the value already peeked by
+	// handleRequestInternal (avoids a second Unmarshal of msg.Params).
+	toolName := ""
+	if v, ok := parent.Get("_tool_name"); ok {
+		toolName, _ = v.(string)
+	}
+	if toolName == "" {
+		// Fallback: parse params (should not happen in normal flow).
+		var params CallToolParams
+		if err := json.Unmarshal(msg.Params, &params); err != nil {
+			return newErrorResponse(msg.ID, -32602, "invalid params: "+err.Error())
+		}
+		toolName = params.Name
 	}
 
 	s.mu.RLock()
-	entry, ok := s.tools[params.Name]
+	entry, ok := s.tools[toolName]
 	if !ok {
-		// version fallback: "search" → try find "search" or latest "search@*"
-		entry, ok = s.resolveToolVersion(params.Name)
+		entry, ok = s.resolveToolVersion(toolName)
 	}
 	s.mu.RUnlock()
 
 	if !ok {
-		return newErrorResponse(msg.ID, -32001, "tool not found: "+params.Name)
+		return newErrorResponse(msg.ID, -32602, "tool not found: "+toolName)
 	}
 
 	// Use the args map that flowed through the middleware chain so any
 	// mutation done there (e.g. [APIKeyAuth] stripping api_key after
 	// validation) is visible to schema validation and the handler.
-	//
-	// We intentionally do NOT fall back to params.Arguments when
-	// parent.Args() is empty: tools/call always produces a
-	// middleware-visible args map via mergedArgsForMiddleware (an
-	// empty map at worst), so an empty parent.Args() means either
-	// "the request truly had no arguments" or "middleware deleted
-	// them all on purpose" — both cases the handler should see the
-	// empty map, not the pre-middleware original.
+	// Use the args map that flowed through the middleware chain so any
+	// mutation done there (e.g. [APIKeyAuth] stripping api_key after
+	// validation) is visible to schema validation and the handler.
 	args := parent.Args()
+
+	if !ok {
+		return newErrorResponse(msg.ID, -32001, "tool not found: "+toolName)
+	}
 
 	// validate parameters if schema available
 	if entry.schemaRes != nil {
@@ -536,8 +544,8 @@ func (s *Server) handleToolsCall(parent *Context, msg *jsonrpcMessage) *jsonrpcM
 		}
 	}
 
-	c := forkContext(parent, args, s.logger.With("tool", params.Name))
-	c.Set("_tool_name", params.Name)
+	c := forkContext(parent, args, s.logger.With("tool", toolName))
+	c.Set("_tool_name", toolName)
 
 	// attach session (header name matched case-insensitively, like net/http)
 	sessionID := transport.LookupHeader(c.ctx, "Mcp-Session-Id")
@@ -557,7 +565,7 @@ func (s *Server) handleToolsCall(parent *Context, msg *jsonrpcMessage) *jsonrpcM
 	func() {
 		defer func() {
 			if r := recover(); r != nil {
-				s.logger.Error("unrecovered panic in tool handler", "tool", params.Name, "panic", fmt.Sprintf("%v", r))
+				s.logger.Error("unrecovered panic in tool handler", "tool", toolName, "panic", fmt.Sprintf("%v", r))
 				handlerErr = fmt.Errorf("internal error: %v", r)
 			}
 		}()
