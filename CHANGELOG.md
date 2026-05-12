@@ -5,6 +5,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.0](https://github.com/zhangpanda/gomcp/compare/v1.4.0...v1.5.0) (2026-05-12)
+
+
+### Features
+
+* benchmark, cookbook, release-please, SSE endurance ([#11](https://github.com/zhangpanda/gomcp/issues/11)) ([36cc572](https://github.com/zhangpanda/gomcp/commit/36cc572bd4fbd83e80886cc773af402b9d8f3fef))
+
+
+### Bug Fixes
+
+* 10 bugs from 2026-05-08 code review ([88a9658](https://github.com/zhangpanda/gomcp/commit/88a96586262495f9fc273fe241955db521420f21))
+* adapter body/schema completeness, gRPC discovery, rate-limit clock regression ([c8df6d7](https://github.com/zhangpanda/gomcp/commit/c8df6d715ce2db3b0b1a58caf4ea885adf272885))
+* **adapter:** URL-escape path params; error on missing ones ([cecedec](https://github.com/zhangpanda/gomcp/commit/cecedec6ee496d9dd89de2949f573ac9ea89bf8e))
+* round-3 review — API key scrub bypass, group tool race, inspector XSS ([13f311a](https://github.com/zhangpanda/gomcp/commit/13f311a193ec18f4f58cbef469b5ea2062ac2888))
+* round-4 review — path traversal, empty content, marshal errors ([dbe4197](https://github.com/zhangpanda/gomcp/commit/dbe419795dbc5021c6c7f4607c2c8c7992d7a000))
+* sandbox findings — OTel bug, gRPC example, docs, CI Windows ([#10](https://github.com/zhangpanda/gomcp/issues/10)) ([a8e3c66](https://github.com/zhangpanda/gomcp/commit/a8e3c665b90849f4289e02e407f93813e7cd9dcc))
+* **schema:** nested/array validation + concurrent race + map type ([f7e72bd](https://github.com/zhangpanda/gomcp/commit/f7e72bde95e1b91adfbf3840ee9e13c84db74887))
+* session leak + perf optimization (46k calls/s, -20% allocs) ([#12](https://github.com/zhangpanda/gomcp/issues/12)) ([ce28594](https://github.com/zhangpanda/gomcp/commit/ce28594b3fc64beda3cd59a002197c5f0e53fa1a))
+* **traffic:** remove unsupported 'administration' permission ([b02b180](https://github.com/zhangpanda/gomcp/commit/b02b180bd3122f63234abcf8af0086c1c96bd26a))
+* **traffic:** require TRAFFIC_TOKEN PAT; GITHUB_TOKEN cannot access Traffic API ([74958ac](https://github.com/zhangpanda/gomcp/commit/74958ac49ef9085b08c9884f116d57864de74ecb))
+
 ## [1.4.0](https://github.com/zhangpanda/gomcp/compare/v1.3.0...v1.4.0) (2026-05-12)
 
 
