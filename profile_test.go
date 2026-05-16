@@ -35,7 +35,8 @@ func TestProfile_HeapDump(t *testing.T) {
 		_ = s.HandleRaw(ctx, req)
 	}
 
-	f, err := os.Create("/tmp/gomcp_heap.prof")
+	out := t.TempDir() + "/gomcp_heap.prof"
+	f, err := os.Create(out)
 	if err != nil {
 		t.Fatalf("create profile: %v", err)
 	}
@@ -43,6 +44,6 @@ func TestProfile_HeapDump(t *testing.T) {
 	if err := pprof.WriteHeapProfile(f); err != nil {
 		t.Fatalf("write profile: %v", err)
 	}
-	t.Logf("heap profile written to /tmp/gomcp_heap.prof")
-	t.Logf("analyze with: go tool pprof -top /tmp/gomcp_heap.prof")
+	t.Logf("heap profile written to %s", out)
+	t.Logf("analyze with: go tool pprof -top %s", out)
 }
