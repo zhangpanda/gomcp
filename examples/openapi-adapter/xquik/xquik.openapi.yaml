@@ -1,0 +1,50 @@
+openapi: 3.1.0
+info:
+  title: Xquik Search Example
+  version: "1.0.0"
+servers:
+  - url: https://xquik.com
+paths:
+  /api/v1/x/tweets/search:
+    get:
+      operationId: searchXquikTweets
+      summary: Search public X posts
+      tags:
+        - xquik
+      security:
+        - oauthBearer: []
+      parameters:
+        - name: q
+          in: query
+          required: true
+          description: Search query.
+          schema:
+            type: string
+        - name: limit
+          in: query
+          required: false
+          description: Maximum results to return.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: cursor
+          in: query
+          required: false
+          description: Pagination cursor from a previous response.
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Search results.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+components:
+  securitySchemes:
+    oauthBearer:
+      type: http
+      scheme: bearer
