@@ -39,7 +39,17 @@ type GRPCOptions struct {
 // ImportGRPC discovers gRPC services via server reflection and registers each
 // unary method as an MCP tool. Streaming methods are skipped.
 func ImportGRPC(s *gomcp.Server, conn *grpc.ClientConn, opts GRPCOptions) error { //nolint:staticcheck // uses deprecated grpc_reflection_v1alpha
+	timeout := opts.Timeout
+	if timeout == 0 {
+		timeout = 10 * time.Second
+	}
 	ctx := context.Background()
+	if timeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, timeout)
+		defer cancel()
+	}
+
 	client := rpb.NewServerReflectionClient(conn)
 	stream, err := client.ServerReflectionInfo(ctx)
 	if err != nil {

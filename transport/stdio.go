@@ -23,34 +23,51 @@ func ServeStdio(handler MessageHandler) error {
 }
 
 func serveIO(ctx context.Context, r io.Reader, w io.Writer, handler MessageHandler) error {
-	scanner := bufio.NewScanner(r)
-	scanner.Buffer(make([]byte, 0, 1024*1024), 10*1024*1024) // 10MB max
+	type scanResult struct {
+		data []byte
+		err  error
+	}
 
-	for scanner.Scan() {
+	lines := make(chan scanResult, 1)
+	go func() {
+		defer close(lines)
+		scanner := bufio.NewScanner(r)
+		scanner.Buffer(make([]byte, 0, 1024*1024), 10*1024*1024) // 10MB max
+		for scanner.Scan() {
+			line := scanner.Bytes()
+			if len(line) == 0 {
+				continue
+			}
+			// Slice copy: scanner buffer is reused across Scan iterations.
+			lines <- scanResult{data: slices.Clone(line)}
+		}
+		if err := scanner.Err(); err != nil {
+			lines <- scanResult{err: err}
+		}
+	}()
+
+	for {
 		select {
 		case <-ctx.Done():
 			return nil
-		default:
-		}
+		case result, ok := <-lines:
+			if !ok {
+				return nil
+			}
+			if result.err != nil {
+				return result.err
+			}
 
-		line := scanner.Bytes()
-		if len(line) == 0 {
-			continue
-		}
-
-		// Slice copy: scanner buffer is reused across Scan iterations.
-		msg := slices.Clone(line)
-
-		resp := handler(ctx, msg)
-		if resp == nil {
-			continue
-		}
-		out := make([]byte, len(resp)+1)
-		copy(out, resp)
-		out[len(resp)] = '\n'
-		if _, err := w.Write(out); err != nil {
-			return err
+			resp := handler(ctx, result.data)
+			if resp == nil {
+				continue
+			}
+			out := make([]byte, len(resp)+1)
+			copy(out, resp)
+			out[len(resp)] = '\n'
+			if _, err := w.Write(out); err != nil {
+				return err
+			}
 		}
 	}
-	return scanner.Err()
 }
